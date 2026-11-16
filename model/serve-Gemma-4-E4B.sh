@@ -1,5 +1,10 @@
-vllm serve google/gemma-4-E4B-it \
-  --host 0.0.0.0 \
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
+exec "$VLLM_BIN" serve google/gemma-4-E4B-it \
+  --host 127.0.0.1 \
   --served-model-name google/gemma-4-E4B-it \
   --tensor-parallel-size 1 \
   --max-model-len 131072 \
@@ -12,5 +17,5 @@ vllm serve google/gemma-4-E4B-it \
   --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1]}' \
   --enable-auto-tool-choice \
   --tool-call-parser gemma4 \
-  --reasoning-parser gemma4 
+  --reasoning-parser gemma4 \
   --performance-mode throughput

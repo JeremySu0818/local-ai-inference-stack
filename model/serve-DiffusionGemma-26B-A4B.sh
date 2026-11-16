@@ -1,7 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
 export VLLM_USE_V2_MODEL_RUNNER=1
 
-vllm serve RedHatAI/diffusiongemma-26B-A4B-it-NVFP4 \
-  --host 0.0.0.0 \
+exec "$VLLM_BIN" serve RedHatAI/diffusiongemma-26B-A4B-it-NVFP4 \
+  --host 127.0.0.1 \
   --served-model-name RedHatAI/diffusiongemma-26B-A4B-it-NVFP4 \
   --trust-remote-code \
   --tensor-parallel-size 1 \

@@ -90,21 +90,10 @@ def app_factory():
     async def proxy(endpoint: str, request: Request):
         import json
 
-        declared = request.headers.get("content-length")
-        if declared:
-            try:
-                if int(declared) < 0:
-                    return error("Invalid Content-Length", 400)
-                if int(declared) > config.body_limit:
-                    return error("Request body too large", 413)
-            except ValueError:
-                return error("Invalid Content-Length", 400)
         body = bytearray()
         try:
             async for chunk in request.stream():
                 body.extend(chunk)
-                if len(body) > config.body_limit:
-                    return error("Request body too large", 413)
         except Exception:
             return error("Request body interrupted", 400)
         ctype = request.headers.get("content-type", "")

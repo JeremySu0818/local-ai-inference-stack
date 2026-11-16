@@ -1,0 +1,129 @@
+state_dir: ./state
+queue_limit: 1024
+request_timeout_seconds: 3600
+models:
+- id: nvidia/Qwen3.8-27B-NVFP4
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Qwen3.8-27B.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: cyankiwi/Devstral-Small-2-24B-Instruct-2512-AWQ-4bit
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Devstral-Small-2.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: RedHatAI/diffusiongemma-26B-A4B-it-NVFP4
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-DiffusionGemma-26B-A4B.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: unsloth/GLM-4.7-Flash-NVFP4
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-GLM-4.7-Flash.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: google/gemma-4-E2B-it
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Gemma-4-E2B.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: google/gemma-4-E4B-it
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Gemma-4-E4B.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: ibm-granite/granite-4.2-30b-nvfp4
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Granite-4.2-30B.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-Nemotron-3.5-Lightning.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: GitMylo/nsfwvision-qwen3-vl-8b-v3-safetensors
+  command:
+  - /bin/bash
+  - /home/jeremy/ai-router/model/serve-nsfwvision-qwen3-vl-8b-v3.sh
+  base_url: http://127.0.0.1:8000/v1
+  health_path: /health
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  stop_timeout_seconds: 30
+  idle_ttl_seconds: 10800
+- id: Qwen/Qwen-Image-2.1
+  backend: qwen_image
+  model_path: ~/.cache/huggingface/downloads/Qwen-Image-2.1/diffusers
+  cpu_offload: true
+  endpoints:
+  - images/generations
+  - images/edits
+  idle_ttl_seconds: 10800

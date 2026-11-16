@@ -1,5 +1,10 @@
-vllm serve ibm-granite/granite-4.2-30b-nvfp4 \
-  --host 0.0.0.0 \
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
+exec "$VLLM_BIN" serve ibm-granite/granite-4.2-30b-nvfp4 \
+  --host 127.0.0.1 \
   --served-model-name ibm-granite/granite-4.2-30b-nvfp4 \
   --tensor-parallel-size 1 \
   --hf-overrides '{"max_position_embeddings":524288}' \

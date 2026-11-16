@@ -1,5 +1,10 @@
-vllm serve cyankiwi/Devstral-Small-2-24B-Instruct-2512-AWQ-4bit \
-  --host 0.0.0.0 \
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
+exec "$VLLM_BIN" serve cyankiwi/Devstral-Small-2-24B-Instruct-2512-AWQ-4bit \
+  --host 127.0.0.1 \
   --served-model-name cyankiwi/Devstral-Small-2-24B-Instruct-2512-AWQ-4bit \
   --tensor-parallel-size 1 \
   --max-model-len 262144 \

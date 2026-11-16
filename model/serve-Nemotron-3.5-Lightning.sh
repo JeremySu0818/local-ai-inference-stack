@@ -1,5 +1,10 @@
-vllm serve nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
-  --host 0.0.0.0 \
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
+exec "$VLLM_BIN" serve nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
+  --host 127.0.0.1 \
   --served-model-name nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
   --tensor-parallel-size 1 \
   --max-model-len 1048576 \

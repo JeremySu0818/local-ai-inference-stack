@@ -25,7 +25,6 @@ class Model:
 class Config:
     models: dict[str, Model]
     queue_limit: int
-    body_limit: int
     request_timeout: float
     state_dir: Path
 
@@ -106,13 +105,12 @@ def load_config(path: str) -> Config:
         )
     if not models:
         raise ValueError("at least one model required")
-    q, b, t = (
+    q, t = (
         int(raw.get("queue_limit", 1024)),
-        int(raw.get("max_body_bytes", 67108864)),
         float(raw.get("request_timeout_seconds", 3600)),
     )
-    if min(q, b, t) <= 0:
+    if min(q, t) <= 0:
         raise ValueError("limits must be positive")
     return Config(
-        models, q, b, t, Path(raw.get("state_dir", "./state")).expanduser().resolve()
+        models, q, t, Path(raw.get("state_dir", "./state")).expanduser().resolve()
     )

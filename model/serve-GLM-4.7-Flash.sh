@@ -1,5 +1,10 @@
-vllm serve unsloth/GLM-4.7-Flash-NVFP4 \
-  --host 0.0.0.0 \
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+
+exec "$VLLM_BIN" serve unsloth/GLM-4.7-Flash-NVFP4 \
+  --host 127.0.0.1 \
   --served-model-name unsloth/GLM-4.7-Flash-NVFP4 \
   --tensor-parallel-size 1 \
   --max-model-len 202752 \

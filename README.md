@@ -7,11 +7,11 @@
 - 模型登記：編輯 `config.yaml` 後重啟；`GET /v1/models` 列出已登記 ID。ID 原樣轉發，必須與後端接受的 ID 相同。
 - JSON：`chat/completions`、`completions`、`embeddings`、`responses`、`images/generations`、`audio/speech`；multipart：`images/edits`、`audio/transcriptions`、`audio/translations`。每個模型須在 `endpoints` 清單啟用。實際參數和能力由後端決定。
 - 透明轉發回應、狀態碼、SSE 串流和 multipart 檔案。內建 Qwen-Image-2.1 在 API 程序內直接執行 Diffusers，無需外部圖片服務。
-- 網路監聽、佇列上限、請求大小上限、啟動期限及程序監控。服務不驗證 API key；監聽 0.0.0.0 時，任何能連到 9000 埠的裝置皆可使用。請以防火牆限制存取；需要透過不可信網路存取時，請使用具備驗證與 TLS 的反向代理或 VPN。
+- 網路監聽、佇列上限、啟動期限及程序監控。服務不驗證 API key；監聽 0.0.0.0 時，任何能連到 9000 埠的裝置皆可使用。請以防火牆限制存取；需要透過不可信網路存取時，請使用具備驗證與 TLS 的反向代理或 VPN。
 
 ## 執行條件與安全契約
 
-1. Linux；Python 3.10 以上。只能執行 **一個 worker、一個路由器實例**。同一個 state directory 以檔案鎖阻擋第二個實例。不要使用多 worker 或多台主機共用一張 GPU。
+1. Linux；路由器本身支援 Python 3.10 以上，`setup.sh` 安裝 vLLM 則需要 Python 3.11～3.14。只能執行 **一個 worker、一個路由器實例**。同一個 state directory 以檔案鎖阻擋第二個實例。不要使用多 worker 或多台主機共用一張 GPU。
 2. HTTP 後端都必須只允許路由器存取；不要讓其他程式直接呼叫後端，否則路由器看不到它們的任務。使用專屬 localhost port。`base_url` 指向後端的 `/v1`，`health_path` 從後端 origin 開始。
 3. HTTP 後端啟動腳本必須在前景執行且最後使用 `exec`，不可 daemonize、`nohup`、`setsid`、移交 systemd、容器或其他程序管理器。子程序必須留在相同 process group。後端不可以把長任務送到另一個在 HTTP 回應後仍然執行的外部服務。這些約束是確保卸載的必要條件。
 4. 後端必須在該次請求真正結束後才結束 HTTP 回應（路由器拒絕 background=pending 或 async=true 的背景任務）；若上游連線出錯，路由器將該後端標記不可信，等待其他在途請求結束後停止整個程序群，再啟動下一個模型。個別客戶端斷線時則繼續讀取後端直至任務結束，避免提前卸載。串流傳輸途中後端發生錯誤時，已送出的 HTTP 200 無法改為 502，客戶端會收到截斷的串流。
@@ -25,21 +25,21 @@
 mkdir -p ~/ai-router
 # 將壓縮檔內容解開至 ~/ai-router
 cd ~/ai-router
-uv venv --python 3.12
-uv pip install --python .venv/bin/python -r requirements.txt
-cp config.example.yaml config.yaml
+./setup.sh
 nano config.yaml
 chmod 600 config.yaml
 ```
 
+`setup.sh` 透過 uv 建立 Python 3.12 的 `.venv` 並安裝 `requirements.txt`；不需預先安裝或指定系統 Python。此總需求檔引用路由器、vLLM/audio（固定 0.33.0）及 Qwen-Image-2.1 圖片後端依賴；Gemma 4 E2B/E4B 音訊輸入需要 vLLM 的 audio extra。
+
 設定每個模型的 `id`、`command`（以 YAML 字串陣列逐個參數給出，無 shell 字串展開）、`base_url`、`health_path` 及 `endpoints`。`cwd` 可指定絕對工作目錄。預設 TTL `10800` 秒，可逐模型調整。
 
-例如 vLLM 腳本：保留自己的模型參數，只需要確認最後以前景 `exec` 執行，並綁定指定 port：
+例如 vLLM 腳本：保留自己的模型參數，使用專案 `.venv` 並以前景 `exec` 執行，綁定 loopback 和指定 port：
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-exec /home/jeremy/ai/vllm/.venv/bin/vllm serve google/gemma-4-E4B-it \
+exec "$HOME/ai-router/.venv/bin/vllm" serve google/gemma-4-E4B-it \
   --host 127.0.0.1 --port 8001 \
   --served-model-name google/gemma-4-E4B-it
 ```
@@ -49,10 +49,10 @@ exec /home/jeremy/ai/vllm/.venv/bin/vllm serve google/gemma-4-E4B-it \
 手動啟動：
 
 ```bash
-cd ~/ai-router
-AI_ROUTER_CONFIG="$PWD/config.yaml" .venv/bin/uvicorn router.app:app_factory \
-  --factory --host 0.0.0.0 --port 9000 --workers 1 --timeout-graceful-shutdown 3700
+./start.sh
 ```
+
+預設監聽 `0.0.0.0:9000`；可用 `AI_ROUTER_HOST`、`AI_ROUTER_PORT`、`AI_ROUTER_CONFIG` 和 `AI_ROUTER_GRACEFUL_SHUTDOWN_SECONDS` 覆寫對應值。前景執行時按 Ctrl+C 會讓 Uvicorn 優雅關閉。
 
 ## systemd
 
@@ -84,26 +84,18 @@ curl -s http://127.0.0.1:9000/health
 
 `/health` 回報狀態、目前模型、執行數和排隊數。`STOPPED → STARTING → READY → DRAINING → STOPPING → STOPPED`；啟動失敗為 `FAILED`，後續請求可重試。FIFO 佇列將相鄰同模型請求一起送入，出現不同模型後新進的舊模型請求不插隊。TTL 從最後一個執行中請求的生命週期結束時計算；排隊、啟動、卸載、租約與切換均由同一個排程器序列化。
 
-## 測試
-
-```bash
-uv pip install --python .venv/bin/python -r requirements-test.txt
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-整合測試以真實本機 HTTP 和模擬後端檢查 300 個請求、模型切換期間的排空、idle TTL、客戶端斷線後的圖像和 SSE、multipart、免驗證存取，後端崩潰、端口占用及取消排隊中的切換。測試不載入 GPU，也不代表針對實際 vLLM、圖像服務或所有程序異常已驗證；請先在目標機器以自己的模型及服務進行驗收。
-
 ## 內建 Qwen-Image-2.1（取代上述外部圖片服務）
 
 ```bash
-uv pip install --python .venv/bin/python -r requirements-image.txt
 .venv/bin/python scripts/prepare_qwen_image.py
 ```
+
+圖片後端 Python 依賴已由 `setup.sh` 安裝；此步驟下載模型所需檔案。
 
 模型集中在 `~/.cache/huggingface/downloads/Qwen-Image-2.1/`。準備腳本將官方 processor、scheduler、編碼器及 VAE 下載到子目錄 `diffusers/`，固定官方 revision；不重複下載主 DiT。主 DiT 使用 Diffusers 官方單檔轉換器載入，無需 ComfyUI。原本 INT8 ConvRot 編碼器及 PE 擴寫模型仍保留，但不載入，因為需要專用量化支援。
 
 ```yaml
-- id: Qwen-Image-2.1
+- id: Qwen/Qwen-Image-2.1
   backend: qwen_image
   model_path: ~/.cache/huggingface/downloads/Qwen-Image-2.1/diffusers
   cpu_offload: true
@@ -134,9 +126,9 @@ uv pip install --python .venv/bin/python -r requirements-image.txt
 ```bash
 curl http://127.0.0.1:9000/v1/images/generations \
   -H 'Content-Type: application/json' \
-  -d '{"model":"Qwen-Image-2.1","prompt":"A cat sticker, RGBA image with a transparent background","size":"1024x1024","seed":42}'
+  -d '{"model":"Qwen/Qwen-Image-2.1","prompt":"A cat sticker, RGBA image with a transparent background","size":"1024x1024","seed":42}'
 curl http://127.0.0.1:9000/v1/images/edits \
-  -F model=Qwen-Image-2.1 -F 'prompt=make it blue' -F image=@input.png
+  -F model=Qwen/Qwen-Image-2.1 -F 'prompt=make it blue' -F image=@input.png
 ```
 
 
