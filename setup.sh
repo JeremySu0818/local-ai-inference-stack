@@ -10,7 +10,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 cd "$ROOT_DIR"
-uv venv --python 3.12 "$VENV_DIR"
+uv venv --python 3.12 --allow-existing "$VENV_DIR"
 uv pip install --torch-backend=auto -r "$ROOT_DIR/requirements.txt"
 
 printf 'Environment ready: %s\n' "$VENV_DIR"

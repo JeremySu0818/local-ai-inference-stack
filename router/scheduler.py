@@ -49,7 +49,6 @@ class Scheduler:
         self.proc = None
         self.native = None
         self.active = 0
-        self.last_finished = time.monotonic()
         self.dirty = False
         self.closing = False
         self.worker = None
@@ -112,7 +111,6 @@ class Scheduler:
                     fut.cancel()
                 elif fut.done() and not fut.cancelled() and fut.exception() is None:
                     self.active -= 1
-                    self.last_finished = time.monotonic()
                 self.cv.notify_all()
             raise
         return Lease(self, mid)
@@ -121,7 +119,6 @@ class Scheduler:
         async with self.cv:
             assert self.active > 0
             self.active -= 1
-            self.last_finished = time.monotonic()
             if failed:
                 self.dirty = True
             self.cv.notify_all()
@@ -188,24 +185,7 @@ class Scheduler:
                                         self.active += 1
                                         w.future.set_result(None)
                                 continue
-                        if (
-                            self.current
-                            and self.state == State.READY
-                            and not self.active
-                        ):
-                            left = self.config.models[self.current].ttl - (
-                                time.monotonic() - self.last_finished
-                            )
-                            if left <= 0:
-                                self.state = State.STOPPING
-                                action = "stop"
-                                break
-                            try:
-                                await asyncio.wait_for(self.cv.wait(), left)
-                            except asyncio.TimeoutError:
-                                pass
-                        else:
-                            await self.cv.wait()
+                        await self.cv.wait()
                 if action == "start":
                     try:
                         await self._start(model)
@@ -213,7 +193,6 @@ class Scheduler:
                             if self.proc and self.proc.returncode is not None:
                                 raise BackendError("backend exited during startup")
                             self.state = State.READY
-                            self.last_finished = time.monotonic()
                             self.cv.notify_all()
                     except Exception as e:
                         log.exception("backend startup failed: %s", model.id)

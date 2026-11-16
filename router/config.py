@@ -14,7 +14,6 @@ class Model:
     endpoints: tuple[str, ...]
     startup_timeout: float
     stop_timeout: float
-    ttl: float
     cwd: str | None
     backend: str = "http"
     model_path: str | None = None
@@ -82,12 +81,11 @@ def load_config(path: str) -> Config:
         health = item.get("health_path", "/health")
         if not health.startswith("/") or health.startswith("//") or "?" in health:
             raise ValueError("invalid health_path")
-        start, stop, ttl = (
+        start, stop = (
             float(item.get("startup_timeout_seconds", 600)),
             float(item.get("stop_timeout_seconds", 30)),
-            float(item.get("idle_ttl_seconds", 10800)),
         )
-        if min(start, stop, ttl) <= 0:
+        if min(start, stop) <= 0:
             raise ValueError("timeouts must be positive")
         models[mid] = Model(
             mid,
@@ -97,7 +95,6 @@ def load_config(path: str) -> Config:
             ep,
             start,
             stop,
-            ttl,
             item.get("cwd"),
             backend,
             str(Path(item["model_path"]).expanduser().resolve()) if native else None,
