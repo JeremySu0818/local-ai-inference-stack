@@ -6,7 +6,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from .config import load_config
-from .scheduler import Scheduler, Busy, BackendError
+from .scheduler import Scheduler, Busy, BackendError, StartupBlocked
 
 log = logging.getLogger("router")
 HOP = {
@@ -38,8 +38,7 @@ def app_factory():
 
     @asynccontextmanager
     async def lifespan(app):
-        scheduler = Scheduler(config)
-        await scheduler.open()
+        scheduler = app.state.scheduler
         app.state.scheduler = scheduler
         app.state.jobs = set()
         app.state.upstream = httpx.AsyncClient(
@@ -57,7 +56,21 @@ def app_factory():
         await scheduler.close()
         await app.state.upstream.aclose()
 
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    class RouterApp(FastAPI):
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "lifespan":
+                scheduler = Scheduler(config)
+                try:
+                    await scheduler.open()
+                except StartupBlocked as exc:
+                    await scheduler.http.aclose()
+                    await receive()  # lifespan.startup
+                    await send({"type": "lifespan.startup.failed", "message": str(exc)})
+                    return
+                self.state.scheduler = scheduler
+            await super().__call__(scope, receive, send)
+
+    app = RouterApp(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.get("/health")
     async def health(request: Request):

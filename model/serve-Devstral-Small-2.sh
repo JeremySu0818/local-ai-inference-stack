@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+export MAX_JOBS=6
+export NVCC_THREADS=6
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"

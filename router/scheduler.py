@@ -21,6 +21,10 @@ class RouterError(Exception):
     pass
 
 
+class StartupBlocked(RouterError):
+    pass
+
+
 class Busy(RouterError):
     pass
 
@@ -59,12 +63,29 @@ class Scheduler:
         try:
             fcntl.flock(self.lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError("another router owns this state directory")
+            self.lockfile.close()
+            raise StartupBlocked("已有 router 使用此狀態目錄，略過啟動")
         marker = self.config.state_dir / "unclean"
         if marker.exists():
-            raise RuntimeError(
-                f"unclean previous shutdown: inspect/stop all backend processes, then remove {marker}"
-            )
+            try:
+                owner = int(marker.read_text().strip())
+                if owner <= 0:
+                    raise ValueError("invalid PID")
+            except ValueError:
+                owner = None
+            if owner is not None:
+                try:
+                    os.kill(owner, 0)
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    self.lockfile.close()
+                    raise StartupBlocked(f"unclean 記錄的程序 {owner} 仍存活，略過啟動")
+                else:
+                    self.lockfile.close()
+                    raise StartupBlocked(f"unclean 記錄的程序 {owner} 仍存活，略過啟動")
+            log.warning("removing stale shutdown marker: %s (PID %s)", marker, owner)
+            marker.unlink()
         fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(f"{os.getpid()}\n")
@@ -227,9 +248,9 @@ class Scheduler:
 
     async def _start(self, m: Model):
         if m.backend == "qwen_image":
-            from .qwen_image import QwenImageBackend
+            from .image_process import ImageProcess
             log.info("loading native image model: %s", m.id)
-            self.native = QwenImageBackend(m)
+            self.native = ImageProcess(m)
             await asyncio.to_thread(self.native.load)
             return
         u = urlsplit(m.base_url)

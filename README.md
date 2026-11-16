@@ -16,7 +16,7 @@
 3. HTTP 後端啟動腳本必須在前景執行且最後使用 `exec`，不可 daemonize、`nohup`、`setsid`、移交 systemd、容器或其他程序管理器。子程序必須留在相同 process group。後端不可以把長任務送到另一個在 HTTP 回應後仍然執行的外部服務。這些約束是確保卸載的必要條件。
 4. 後端必須在該次請求真正結束後才結束 HTTP 回應（路由器拒絕 background=pending 或 async=true 的背景任務）；若上游連線出錯，路由器將該後端標記不可信，等待其他在途請求結束後停止整個程序群，再啟動下一個模型。個別客戶端斷線時則繼續讀取後端直至任務結束，避免提前卸載。串流傳輸途中後端發生錯誤時，已送出的 HTTP 200 無法改為 502，客戶端會收到截斷的串流。
 5. 接收 `/v1` 請求和等待期間客戶端要容許冷啟動及排隊所需時間。`request_timeout_seconds` 是 HTTP 讀取閒置逾時，不是佇列等待上限或總執行時間上限。
-6. 狀態檔 `unclean` 代表路由器執行中或上次非正常結束；如異常中止，必須確認所有後端子程序均已停止，再手動刪除此檔，避免與遺留程序重疊。不要在服務執行中刪除。系統異常可能使程序群 SIGKILL 後暫時無法退出，路由器會停止排程並保留狀態檔。
+6. 狀態檔 `unclean` 代表路由器執行中或上次非正常結束；啟動時取得 router.lock 後，若此檔記錄的 PID 已不存在（或內容無效），會自動清除此檔；若 PID 仍存活則拒絕啟動。異常中止後仍應確認沒有遺留後端程序。不要在服務執行中刪除。系統異常可能使程序群 SIGKILL 後暫時無法退出，路由器會停止排程並保留狀態檔。
 7. 信任配置檔、啟動腳本及後端：它們可以執行本機程式。機密用環境變數提供，不要寫入 YAML、腳本或日誌。
 
 ## 安裝（Arch Linux）
@@ -38,6 +38,8 @@ chmod 600 config.yaml
 
 ```bash
 #!/usr/bin/env bash
+export MAX_JOBS=10
+export NVCC_THREADS=6
 set -euo pipefail
 exec "$HOME/ai-router/.venv/bin/vllm" serve google/gemma-4-E4B-it \
   --host 127.0.0.1 --port 8001 \
@@ -65,7 +67,7 @@ sudo systemctl enable --now ai-router
 journalctl -u ai-router -f
 ```
 
-使用 `KillMode=mixed`：正常停止時讓主程序排空，逾期才強制結束整個 cgroup。`TimeoutStopSec` 與 Uvicorn 的 graceful timeout 應大於最長可接受任務時間。若服務由 SIGKILL、掉電或 systemd 逾時強制終止，檢查並清理後端後再刪除 `state/unclean` 才重新啟動。不要設定自動重啟繞過此檢查。
+使用 `KillMode=mixed`：正常停止時讓主程序排空，逾期才強制結束整個 cgroup。`TimeoutStopSec` 與 Uvicorn 的 graceful timeout 應大於最長可接受任務時間。若服務由 SIGKILL、掉電或 systemd 逾時強制終止，檢查並清理遺留後端；重新啟動時會自動清除 PID 已不存在的 `state/unclean`。
 
 ## 使用
 
