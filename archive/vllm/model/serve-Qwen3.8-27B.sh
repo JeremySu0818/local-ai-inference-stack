@@ -3,24 +3,22 @@ export MAX_JOBS=6
 export NVCC_THREADS=6
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+VLLM_BIN="$SCRIPT_DIR/../../../.venv/bin/vllm"
 
-exec "$VLLM_BIN" serve nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
+exec "$VLLM_BIN" serve nvidia/Qwen3.8-27B-NVFP4 \
   --host 127.0.0.1 \
-  --served-model-name nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
+  --served-model-name nvidia/Qwen3.8-27B-NVFP4 \
   --tensor-parallel-size 1 \
-  --max-model-len 1048576 \
+  --max-model-len 262144 \
   --max-num-seqs 2 \
   --max-num-batched-tokens 2048 \
   --gpu-memory-utilization 0.97 \
-  --kv-cache-dtype fp8 \
-  --moe-backend marlin \
-  --mamba-backend flashinfer \
-  --mamba-cache-mode align \
+  --kv-cache-dtype nvfp4 \
+  --attention-backend FLASHINFER \
   --enable-chunked-prefill \
   --enable-prefix-caching \
   --async-scheduling \
   --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1]}' \
   --enable-auto-tool-choice \
   --tool-call-parser qwen3_coder \
-  --reasoning-parser nemotron_v3
+  --reasoning-parser qwen3

@@ -1,0 +1,58 @@
+models:
+- id: lmstudio-community/Qwen3.8-27B-GGUF
+  backend: llama_cpp
+  gguf: Qwen3.8-27B-Q4_K_M.gguf
+  context_size: 262144
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  mmproj: mmproj-Qwen3.8-27B-BF16.gguf
+- id: ggml-org/gemma-4-E2B-it-GGUF
+  backend: llama_cpp
+  gguf: gemma-4-E2B-it-Q8_0.gguf
+  context_size: 131072
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  mmproj: mmproj-gemma-4-E2B-it-BF16.gguf
+- id: lmstudio-community/gemma-4-E4B-it-GGUF
+  backend: llama_cpp
+  gguf: gemma-4-E4B-it-Q8_0.gguf
+  context_size: 131072
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  mmproj: mmproj-gemma-4-E4B-it-BF16.gguf
+- id: ggml-org/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF
+  backend: llama_cpp
+  gguf: NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf
+  context_size: 1048576
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+- id: GitMylo/nsfwvision-qwen3-vl-8b-v3-gguf
+  backend: llama_cpp
+  gguf: nsfwvision_v3-Q4_K_M.gguf
+  context_size: 262144
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
+  mmproj: mmproj-nsfwvision_v3-f16.gguf
+- id: Qwen/Qwen-Image-2.1
+  backend: qwen_image
+  model_path: Qwen/Qwen-Image-2.1
+  cpu_offload: true
+  endpoints:
+  - images/generations
+  - images/edits
+  model_revision: d26bb61231c349cf6b7896fa83353113880e1ba3

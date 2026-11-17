@@ -3,21 +3,24 @@ export MAX_JOBS=6
 export NVCC_THREADS=6
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-VLLM_BIN="$SCRIPT_DIR/../.venv/bin/vllm"
+VLLM_BIN="$SCRIPT_DIR/../../../.venv/bin/vllm"
 
-exec "$VLLM_BIN" serve GitMylo/nsfwvision-qwen3-vl-8b-v3-safetensors \
+exec "$VLLM_BIN" serve nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
   --host 127.0.0.1 \
-  --served-model-name GitMylo/nsfwvision-qwen3-vl-8b-v3-safetensors \
+  --served-model-name nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 \
   --tensor-parallel-size 1 \
-  --max-model-len 262144 \
+  --max-model-len 1048576 \
   --max-num-seqs 2 \
   --max-num-batched-tokens 2048 \
   --gpu-memory-utilization 0.97 \
-  --kv-cache-dtype nvfp4 \
-  --attention-backend FLASHINFER \
+  --kv-cache-dtype fp8 \
+  --moe-backend marlin \
+  --mamba-backend flashinfer \
+  --mamba-cache-mode align \
   --enable-chunked-prefill \
   --enable-prefix-caching \
   --async-scheduling \
   --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1]}' \
   --enable-auto-tool-choice \
-  --tool-call-parser qwen3_coder
+  --tool-call-parser qwen3_coder \
+  --reasoning-parser nemotron_v3

@@ -8,7 +8,7 @@ import traceback
 
 def _worker(connection, model):
     # Only the spawned interpreter imports torch and creates CUDA resources.
-    from .qwen_image import QwenImageBackend
+    from .pipeline import QwenImageBackend
 
     try:
         backend = QwenImageBackend(model)

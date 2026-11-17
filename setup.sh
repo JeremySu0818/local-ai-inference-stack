@@ -11,8 +11,13 @@ fi
 
 cd "$ROOT_DIR"
 uv venv --python 3.12 --allow-existing "$VENV_DIR"
-uv pip install --torch-backend=auto -r "$ROOT_DIR/requirements.txt"
+uv pip install --torch-backend=auto -r "$ROOT_DIR/requirements/base.txt"
+
+PYTHON="$VENV_DIR/bin/python"
+LLAMA_DIR=$("$PYTHON" -m backends.llama_cpp source-dir)
+bash "$ROOT_DIR/backends/llama_cpp/build.sh" "$LLAMA_DIR"
+"$PYTHON" -m scripts.prepare_models "${AI_ROUTER_CONFIG:-$ROOT_DIR/config/models.yaml}"
 
 printf 'Environment ready: %s\n' "$VENV_DIR"
 printf 'Router: %s/bin/uvicorn\n' "$VENV_DIR"
-printf 'vLLM: %s/bin/vllm\n' "$VENV_DIR"
+printf 'llama.cpp: %s/build/bin/llama-server\n' "$LLAMA_DIR"

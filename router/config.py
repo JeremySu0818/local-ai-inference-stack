@@ -1,8 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from urllib.parse import urlsplit
 import yaml
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ROUTER_CONFIG = PROJECT_ROOT / "config/router.yaml"
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,10 @@ class Model:
     backend: str = "http"
     model_path: str | None = None
     cpu_offload: bool = False
+    model_revision: str | None = None
+    gguf: str | None = None
+    mmproj: str | None = None
+    context_size: int | None = None
 
 
 @dataclass(frozen=True)
@@ -48,15 +57,31 @@ def load_config(path: str) -> Config:
     for item in raw["models"]:
         mid = item["id"]
         backend = item.get("backend", "http")
-        if backend not in ("http", "qwen_image"):
+        if backend not in ("http", "qwen_image", "llama_cpp"):
             raise ValueError(f"{mid}: unsupported backend")
         native = backend == "qwen_image"
         if native and not item.get("model_path"):
             raise ValueError(f"{mid}: model_path is required")
-        cmd = item.get("command", []) if native else item["command"]
-        u = urlsplit(item.get("base_url", ""))
         if not isinstance(mid, str) or not mid or mid in models:
             raise ValueError("empty or duplicate model id")
+        llama = backend == "llama_cpp"
+        model_path = item.get("model_path") if native else None
+        if model_path and (not item.get("model_revision") or model_path.startswith(("/", ".", "~"))):
+            model_path = str(Path(model_path).expanduser().resolve())
+        base_url = "http://127.0.0.1:8000/v1" if llama else item.get("base_url", "")
+        u = urlsplit(base_url)
+        if llama:
+            if not isinstance(item.get("gguf"), str) or not item["gguf"].endswith(".gguf"):
+                raise ValueError(f"{mid}: gguf filename is required")
+            if item.get("mmproj") is not None and (
+                not isinstance(item["mmproj"], str) or not item["mmproj"].endswith(".gguf")
+            ):
+                raise ValueError(f"{mid}: invalid mmproj filename")
+            if type(item.get("context_size")) is not int or item["context_size"] <= 0:
+                raise ValueError(f"{mid}: context_size must be a positive integer")
+            cmd = [sys.executable, "-m", "backends.llama_cpp", "serve", str(Path(path).resolve()), mid]
+        else:
+            cmd = item.get("command", [])
         if not native and (
             not isinstance(cmd, list)
             or not cmd
@@ -88,26 +113,36 @@ def load_config(path: str) -> Config:
         if min(start, stop) <= 0:
             raise ValueError("timeouts must be positive")
         models[mid] = Model(
-            mid,
-            tuple(cmd),
-            item.get("base_url", "").rstrip("/"),
-            health,
-            ep,
-            start,
-            stop,
-            item.get("cwd"),
-            backend,
-            str(Path(item["model_path"]).expanduser().resolve()) if native else None,
-            bool(item.get("cpu_offload", False)),
+            id=mid,
+            command=tuple(cmd),
+            base_url=base_url.rstrip("/"),
+            health_path=health,
+            endpoints=ep,
+            startup_timeout=start,
+            stop_timeout=stop,
+            cwd=None if llama else item.get("cwd"),
+            backend=backend,
+            model_path=model_path,
+            cpu_offload=bool(item.get("cpu_offload", False)),
+            model_revision=item.get("model_revision"),
+            gguf=item.get("gguf"),
+            mmproj=item.get("mmproj"),
+            context_size=item.get("context_size"),
         )
     if not models:
         raise ValueError("at least one model required")
-    q, t = (
-        int(raw.get("queue_limit", 1024)),
-        float(raw.get("request_timeout_seconds", 3600)),
-    )
+    with ROUTER_CONFIG.open(encoding="utf-8") as f:
+        runtime = yaml.safe_load(f)
+    if not isinstance(runtime, dict):
+        raise ValueError("router configuration must be a mapping")
+
+    # Preserve overrides in older custom configurations.
+    q = int(raw.get("queue_limit", runtime["queue_limit"]))
+    t = float(raw.get("request_timeout_seconds", runtime["request_timeout_seconds"]))
     if min(q, t) <= 0:
         raise ValueError("limits must be positive")
-    return Config(
-        models, q, t, Path(raw.get("state_dir", "./state")).expanduser().resolve()
+    state_dir = (
+        Path(raw["state_dir"]).expanduser() if "state_dir" in raw
+        else PROJECT_ROOT / Path(runtime["state_dir"]).expanduser()
     )
+    return Config(models, q, t, state_dir.resolve())

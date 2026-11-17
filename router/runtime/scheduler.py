@@ -1,9 +1,14 @@
 from __future__ import annotations
-import asyncio, collections, enum, fcntl, logging, os, signal, socket, time
+import asyncio
+import collections
+import enum
+import logging
 from dataclasses import dataclass
-from urllib.parse import urlsplit
 import httpx
-from .config import Config, Model
+from .backend_process import start_process, stop_process, wait_until_ready
+from ..config import Config, Model
+from .errors import BackendError, Busy
+from .state_lock import acquire_state_lock, release_state_lock
 
 log = logging.getLogger("router.scheduler")
 
@@ -15,22 +20,6 @@ class State(str, enum.Enum):
     DRAINING = "DRAINING"
     STOPPING = "STOPPING"
     FAILED = "FAILED"
-
-
-class RouterError(Exception):
-    pass
-
-
-class StartupBlocked(RouterError):
-    pass
-
-
-class Busy(RouterError):
-    pass
-
-
-class BackendError(RouterError):
-    pass
 
 
 @dataclass(eq=False)
@@ -57,39 +46,7 @@ class Scheduler:
         self.http = httpx.AsyncClient(timeout=2, trust_env=False)
 
     async def open(self):
-        self.config.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.lockfile = open(self.config.state_dir / "router.lock", "a+")
-        try:
-            fcntl.flock(self.lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.lockfile.close()
-            raise StartupBlocked("已有 router 使用此狀態目錄，略過啟動")
-        marker = self.config.state_dir / "unclean"
-        if marker.exists():
-            try:
-                owner = int(marker.read_text().strip())
-                if owner <= 0:
-                    raise ValueError("invalid PID")
-            except ValueError:
-                owner = None
-            if owner is not None:
-                try:
-                    os.kill(owner, 0)
-                except ProcessLookupError:
-                    pass
-                except PermissionError:
-                    self.lockfile.close()
-                    raise StartupBlocked(f"unclean 記錄的程序 {owner} 仍存活，略過啟動")
-                else:
-                    self.lockfile.close()
-                    raise StartupBlocked(f"unclean 記錄的程序 {owner} 仍存活，略過啟動")
-            log.warning("removing stale shutdown marker: %s (PID %s)", marker, owner)
-            marker.unlink()
-        fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(f"{os.getpid()}\n")
-            f.flush()
-            os.fsync(f.fileno())
+        self.lockfile = acquire_state_lock(self.config.state_dir)
         self.worker = asyncio.create_task(self._run(), name="scheduler")
 
     async def acquire(self, mid: str):
@@ -227,39 +184,14 @@ class Scheduler:
 
     async def _start(self, m: Model):
         if m.backend == "qwen_image":
-            from .image_process import ImageProcess
+            from backends.qwen_image.process import ImageProcess
             log.info("loading native image model: %s", m.id)
             self.native = ImageProcess(m)
             await asyncio.to_thread(self.native.load)
             return
-        u = urlsplit(m.base_url)
-        # Refuse to adopt an unrelated service already listening on the target port.
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(u.hostname, u.port), 1
-            )
-        except (OSError, asyncio.TimeoutError):
-            pass
-        else:
-            writer.close()
-            await writer.wait_closed()
-            raise BackendError("backend port already in use")
-        self.proc = await asyncio.create_subprocess_exec(
-            *m.command, cwd=m.cwd, start_new_session=True
-        )
+        self.proc = await start_process(m)
         self.monitor = asyncio.create_task(self._watch(self.proc))
-        deadline = time.monotonic() + m.startup_timeout
-        while time.monotonic() < deadline:
-            if self.proc.returncode is not None:
-                raise BackendError(f"backend exited with status {self.proc.returncode}")
-            try:
-                r = await self.http.get(f"{u.scheme}://{u.netloc}{m.health_path}")
-                if r.is_success:
-                    return
-            except httpx.HTTPError:
-                pass
-            await asyncio.sleep(0.25)
-        raise BackendError("backend readiness timed out")
+        await wait_until_ready(self.proc, m, self.http)
 
     async def _watch(self, proc):
         await proc.wait()
@@ -280,39 +212,7 @@ class Scheduler:
         proc = self.proc
         if proc is None:
             return
-        pgid = proc.pid
-
-        def send(sig):
-            try:
-                os.killpg(pgid, sig)
-            except ProcessLookupError:
-                pass
-
-        send(signal.SIGTERM)
-        # Always kill the whole group after the grace period, including descendants
-        # whose group leader has already exited.
-        end = time.monotonic() + self.config.models[self.current].stop_timeout
-        while time.monotonic() < end:
-            try:
-                os.killpg(pgid, 0)
-            except ProcessLookupError:
-                break
-            await asyncio.sleep(0.05)
-        send(signal.SIGKILL)
-        try:
-            await asyncio.wait_for(proc.wait(), 5)
-        except asyncio.TimeoutError:
-            raise BackendError("failed to reap backend")
-        # A surviving process group means unloading was not established; fail closed.
-        deadline = time.monotonic() + 5
-        while True:
-            try:
-                os.killpg(pgid, 0)
-            except ProcessLookupError:
-                break
-            if time.monotonic() >= deadline:
-                raise BackendError("backend process group survived SIGKILL")
-            await asyncio.sleep(0.05)
+        await stop_process(proc, self.config.models[self.current].stop_timeout)
         self.proc = None
         if self.monitor:
             await self.monitor
@@ -324,9 +224,7 @@ class Scheduler:
             self.cv.notify_all()
         await self.worker
         await self.http.aclose()
-        (self.config.state_dir / "unclean").unlink()
-        fcntl.flock(self.lockfile, fcntl.LOCK_UN)
-        self.lockfile.close()
+        release_state_lock(self.config.state_dir, self.lockfile)
 
 
 class Lease:

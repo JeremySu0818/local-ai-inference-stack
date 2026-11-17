@@ -1,11 +1,8 @@
-state_dir: ./state
-queue_limit: 1024
-request_timeout_seconds: 3600
 models:
 - id: nvidia/Qwen3.8-27B-NVFP4
   command:
   - /bin/bash
-  - ./model/serve-Qwen3.8-27B.sh
+  - ./archive/vllm/model/serve-Qwen3.8-27B.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -17,7 +14,7 @@ models:
 - id: RedHatAI/diffusiongemma-26B-A4B-it-NVFP4
   command:
   - /bin/bash
-  - ./model/serve-DiffusionGemma-26B-A4B.sh
+  - ./archive/vllm/model/serve-DiffusionGemma-26B-A4B.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -29,7 +26,7 @@ models:
 - id: google/gemma-4-E2B-it
   command:
   - /bin/bash
-  - ./model/serve-Gemma-4-E2B.sh
+  - ./archive/vllm/model/serve-Gemma-4-E2B.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -41,7 +38,7 @@ models:
 - id: google/gemma-4-E4B-it
   command:
   - /bin/bash
-  - ./model/serve-Gemma-4-E4B.sh
+  - ./archive/vllm/model/serve-Gemma-4-E4B.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -53,7 +50,7 @@ models:
 - id: nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
   command:
   - /bin/bash
-  - ./model/serve-Nemotron-3.5-Lightning.sh
+  - ./archive/vllm/model/serve-Nemotron-3.5-Lightning.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -65,7 +62,7 @@ models:
 - id: GitMylo/nsfwvision-qwen3-vl-8b-v3-safetensors
   command:
   - /bin/bash
-  - ./model/serve-nsfwvision-qwen3-vl-8b-v3.sh
+  - ./archive/vllm/model/serve-nsfwvision-qwen3-vl-8b-v3.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:

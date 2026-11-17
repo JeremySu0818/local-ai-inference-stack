@@ -5,7 +5,7 @@ import re
 MODEL_ID = "Qwen/Qwen3.5-0.8B"
 REVISION = "2fc06364715b967f1860aea9cf38778875588b17"
 RATIOS = {"1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"}
-log = logging.getLogger("router.image_size")
+log = logging.getLogger(__name__)
 
 
 class SizeSelector:

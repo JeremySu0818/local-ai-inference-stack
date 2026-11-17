@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_PATH="${AI_ROUTER_CONFIG:-$ROOT_DIR/config.yaml}"
+CONFIG_PATH="${AI_ROUTER_CONFIG:-$ROOT_DIR/config/models.yaml}"
 UVICORN="$ROOT_DIR/.venv/bin/uvicorn"
 
 if [[ ! -x "$UVICORN" ]]; then
