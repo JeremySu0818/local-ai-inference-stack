@@ -45,7 +45,6 @@ class QwenImageBackend:
     def generate(self, options, images):
         import torch
 
-        # The scheduler may admit multiple same-model requests; pipelines are mutable.
         with self.lock, torch.inference_mode():
             if options.width is None:
                 ratio = self.size_selector.choose(options.prompt)

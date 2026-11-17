@@ -24,7 +24,6 @@ async def proxy(endpoint: str, request: Request):
                 data.get("background") == "pending" or data.get("async") is True
             )
         elif ctype.lower().startswith("multipart/form-data"):
-            # Parse a synthetic request so the exact original multipart bytes are forwarded.
             from starlette.requests import Request as SRequest
 
             async def receive():

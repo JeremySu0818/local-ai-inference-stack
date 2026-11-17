@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the pinned CUDA server once; subsequent setup runs reuse it.
 LLAMA_DIR="$1"
 if [[ ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
   for tool in curl tar sha256sum cmake nvcc; do

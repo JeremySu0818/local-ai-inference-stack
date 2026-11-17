@@ -104,7 +104,6 @@ async def parse_request(endpoint, body, content_type):
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
             raise ValueError("invalid reference image") from exc
     if options.width is None and images:
-        # Match the pipeline's automatic sizing, while retaining the API size limits.
         ratio = images[-1].width / images[-1].height if images else 1.0
         options.width = round(options.output_resolution * math.sqrt(ratio) / 32) * 32
         options.height = round(options.output_resolution / math.sqrt(ratio) / 32) * 32

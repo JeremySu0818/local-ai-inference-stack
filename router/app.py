@@ -25,7 +25,6 @@ def app_factory():
             limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
         )
         yield
-        # Stop admitting requests, then wait for detached producers to finish.
         async with scheduler.cv:
             scheduler.closing = True
             scheduler.cv.notify_all()
@@ -42,7 +41,7 @@ def app_factory():
                     await scheduler.open()
                 except StartupBlocked as exc:
                     await scheduler.http.aclose()
-                    await receive()  # lifespan.startup
+                    await receive()
                     await send({"type": "lifespan.startup.failed", "message": str(exc)})
                     return
                 self.state.scheduler = scheduler

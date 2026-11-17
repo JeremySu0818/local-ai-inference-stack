@@ -12,7 +12,6 @@ from .errors import BackendError
 
 async def start_process(model):
     u = urlsplit(model.base_url)
-    # Refuse to adopt an unrelated service already listening on the target port.
     try:
         _, writer = await asyncio.wait_for(
             asyncio.open_connection(u.hostname, u.port), 1
@@ -54,8 +53,6 @@ async def stop_process(proc, timeout):
             pass
 
     send(signal.SIGTERM)
-    # Always kill the whole group after the grace period, including descendants
-    # whose group leader has already exited.
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         try:
@@ -68,7 +65,6 @@ async def stop_process(proc, timeout):
         await asyncio.wait_for(proc.wait(), 5)
     except asyncio.TimeoutError:
         raise BackendError("failed to reap backend")
-    # A surviving process group means unloading was not established; fail closed.
     deadline = time.monotonic() + 5
     while True:
         try:

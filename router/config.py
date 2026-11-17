@@ -136,7 +136,6 @@ def load_config(path: str) -> Config:
     if not isinstance(runtime, dict):
         raise ValueError("router configuration must be a mapping")
 
-    # Preserve overrides in older custom configurations.
     q = int(raw.get("queue_limit", runtime["queue_limit"]))
     t = float(raw.get("request_timeout_seconds", runtime["request_timeout_seconds"]))
     if min(q, t) <= 0:

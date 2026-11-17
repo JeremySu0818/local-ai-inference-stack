@@ -7,7 +7,6 @@ import traceback
 
 
 def _worker(connection, model):
-    # Only the spawned interpreter imports torch and creates CUDA resources.
     from .pipeline import QwenImageBackend
 
     try:
@@ -65,8 +64,6 @@ class ImageProcess:
             return self._receive()
 
     def unload(self):
-        # A cancelled asyncio.to_thread call may still be receiving a generation.
-        # Terminate the process independently of that thread's lock or pipe state.
         process = self.process
         if process is None:
             return

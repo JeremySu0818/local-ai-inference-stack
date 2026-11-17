@@ -29,7 +29,6 @@ END = object()
 async def stream_inference(request, model, endpoint, body, native_input):
     mid = model.id
     headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
-    # Preserve the query string; endpoint itself is restricted to the allowlist.
     url = model.base_url + "/" + endpoint
     if request.url.query:
         url += "?" + request.url.query
@@ -89,7 +88,6 @@ async def stream_inference(request, model, endpoint, body, native_input):
                 ready.set_exception(e)
         finally:
             await put(END)
-            # Keep the lease through downstream delivery, or until disconnect.
             if (
                 lease
                 and ready.done()
@@ -112,7 +110,6 @@ async def stream_inference(request, model, endpoint, body, native_input):
     request.app.state.jobs.add(task)
     task.add_done_callback(request.app.state.jobs.discard)
 
-    # Before response headers, notice a disconnected client while waiting in the queue.
     async def watch_disconnect():
         while True:
             message = await request.receive()
@@ -126,7 +123,6 @@ async def stream_inference(request, model, endpoint, body, native_input):
         )
         if watcher in done and not ready.done():
             abandoned.set()
-            # Queued requests can be removed; admitted requests must drain.
             if not admitted.is_set():
                 task.cancel()
             return error("Client disconnected", 499)
