@@ -24,9 +24,11 @@ class Model:
     model_path: str | None = None
     cpu_offload: bool = False
     model_revision: str | None = None
+    hf_repo: str | None = None
     gguf: str | None = None
     mmproj: str | None = None
     context_size: int | None = None
+    parallel: int = 1
 
 
 @dataclass(frozen=True)
@@ -70,7 +72,13 @@ def load_config(path: str) -> Config:
             model_path = str(Path(model_path).expanduser().resolve())
         base_url = "http://127.0.0.1:8000/v1" if llama else item.get("base_url", "")
         u = urlsplit(base_url)
+        parallel = item.get("parallel", 1) if llama else 1
+        hf_repo = item.get("hf_repo", mid) if llama else None
         if llama:
+            if not isinstance(hf_repo, str) or hf_repo.count("/") != 1 or not all(hf_repo.split("/")):
+                raise ValueError(f"{mid}: hf_repo must be a Hugging Face owner/repository ID")
+            if type(parallel) is not int or not 1 <= parallel <= 256:
+                raise ValueError(f"{mid}: parallel must be an integer from 1 to 256")
             if not isinstance(item.get("gguf"), str) or not item["gguf"].endswith(".gguf"):
                 raise ValueError(f"{mid}: gguf filename is required")
             if item.get("mmproj") is not None and (
@@ -125,9 +133,11 @@ def load_config(path: str) -> Config:
             model_path=model_path,
             cpu_offload=bool(item.get("cpu_offload", False)),
             model_revision=item.get("model_revision"),
+            hf_repo=hf_repo,
             gguf=item.get("gguf"),
             mmproj=item.get("mmproj"),
             context_size=item.get("context_size"),
+            parallel=parallel,
         )
     if not models:
         raise ValueError("at least one model required")

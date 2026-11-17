@@ -27,14 +27,15 @@ def serve(config_path, model_id):
     args = [str(SERVER)]
     for flag, filename in (("-m", model.gguf), ("--mmproj", model.mmproj)):
         if filename is not None:
-            path = cached_file(model.id, filename)
+            path = cached_file(model.hf_repo, filename)
             if path is None:
-                raise SystemExit(f"Missing cached file {model.id}/{filename}. Run ./setup.sh")
+                raise SystemExit(f"Missing cached file {model.hf_repo}/{filename}. Run ./setup.sh")
             args.extend((flag, path))
 
     args.extend((
         "--alias", model.id, "--host", "127.0.0.1", "--port", "8000",
-        "--ctx-size", str(model.context_size), "--parallel", "1",
+        "--ctx-size", str(model.context_size), "--parallel", str(model.parallel),
+        "--kv-unified",
         "--n-gpu-layers", "all", "--fit", "off", "--flash-attn", "on",
         "--cache-type-k", "q8_0", "--cache-type-v", "q8_0", "--jinja",
     ))

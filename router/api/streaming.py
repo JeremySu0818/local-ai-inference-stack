@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import threading
 
 from fastapi.responses import StreamingResponse
 
@@ -26,6 +27,30 @@ HOP = {
 END = object()
 
 
+class InferenceResponse(StreamingResponse):
+    def __init__(self, *args, watcher, abandon, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.watcher = watcher
+        self.abandon = abandon
+
+    async def __call__(self, scope, receive, send):
+        delivery = asyncio.create_task(self.stream_response(send))
+        try:
+            done, _ = await asyncio.wait(
+                (delivery, self.watcher), return_when=asyncio.FIRST_COMPLETED
+            )
+            if delivery in done:
+                await delivery
+        except OSError:
+            pass
+        finally:
+            if not delivery.done() or delivery.cancelled() or delivery.exception():
+                self.abandon()
+            delivery.cancel()
+            self.watcher.cancel()
+            await asyncio.gather(delivery, self.watcher, return_exceptions=True)
+
+
 async def stream_inference(request, model, endpoint, body, native_input):
     mid = model.id
     headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
@@ -37,6 +62,8 @@ async def stream_inference(request, model, endpoint, body, native_input):
     abandoned = asyncio.Event()
     consumed = asyncio.Event()
     admitted = asyncio.Event()
+    image_cancel = threading.Event()
+    producing = True
     ready.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
 
     async def put(item):
@@ -44,13 +71,15 @@ async def stream_inference(request, model, endpoint, body, native_input):
             return
         a = asyncio.create_task(q.put(item))
         b = asyncio.create_task(abandoned.wait())
-        done, _ = await asyncio.wait((a, b), return_when=asyncio.FIRST_COMPLETED)
-        for t in (a, b):
-            if t not in done:
+        try:
+            await asyncio.wait((a, b), return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in (a, b):
                 t.cancel()
-        await asyncio.gather(a, b, return_exceptions=True)
+            await asyncio.gather(a, b, return_exceptions=True)
 
     async def producer():
+        nonlocal producing
         lease = None
         failed = False
         try:
@@ -58,8 +87,10 @@ async def stream_inference(request, model, endpoint, body, native_input):
             admitted.set()
             if native_input is not None:
                 result = await asyncio.to_thread(
-                    request.app.state.scheduler.native.generate, *native_input
+                    request.app.state.scheduler.native.generate, *native_input, image_cancel
                 )
+                if abandoned.is_set():
+                    return
                 ready.set_result((200, {"content-type": "application/json"}))
                 await put(json.dumps(result).encode())
                 return
@@ -77,7 +108,7 @@ async def stream_inference(request, model, endpoint, body, native_input):
                 async for chunk in resp.aiter_bytes():
                     await put(chunk)
         except asyncio.CancelledError:
-            failed = lease is not None
+            failed = lease is not None and not abandoned.is_set()
             if not ready.done():
                 ready.cancel()
             raise
@@ -87,6 +118,7 @@ async def stream_inference(request, model, endpoint, body, native_input):
             if not ready.done():
                 ready.set_exception(e)
         finally:
+            producing = False
             await put(END)
             if (
                 lease
@@ -110,27 +142,34 @@ async def stream_inference(request, model, endpoint, body, native_input):
     request.app.state.jobs.add(task)
     task.add_done_callback(request.app.state.jobs.discard)
 
+    def abandon():
+        if abandoned.is_set():
+            return
+        abandoned.set()
+        image_cancel.set()
+        if producing and (native_input is None or not admitted.is_set()):
+            task.cancel()
+
     async def watch_disconnect():
         while True:
             message = await request.receive()
             if message["type"] == "http.disconnect":
+                abandon()
                 return
 
     watcher = asyncio.create_task(watch_disconnect())
+    handoff = False
     try:
         done, _ = await asyncio.wait(
             (ready, watcher), return_when=asyncio.FIRST_COMPLETED
         )
-        if watcher in done and not ready.done():
-            abandoned.set()
-            if not admitted.is_set():
-                task.cancel()
+        if watcher in done:
+            abandon()
             return error("Client disconnected", 499)
         status, rheaders = await ready
+        handoff = True
     except asyncio.CancelledError:
-        abandoned.set()
-        if not admitted.is_set():
-            task.cancel()
+        abandon()
         raise
     except Busy as e:
         return error(e, 503, "server_error")
@@ -139,8 +178,9 @@ async def stream_inference(request, model, endpoint, body, native_input):
     except Exception as e:
         return error("Backend request failed: " + str(e), 502, "server_error")
     finally:
-        watcher.cancel()
-        await asyncio.gather(watcher, return_exceptions=True)
+        if not handoff:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
 
     async def stream():
         try:
@@ -151,7 +191,8 @@ async def stream_inference(request, model, endpoint, body, native_input):
                 yield item
         finally:
             consumed.set()
-            abandoned.set()
 
-    return StreamingResponse(stream(), status_code=status, headers=rheaders)
+    return InferenceResponse(
+        stream(), status_code=status, headers=rheaders, watcher=watcher, abandon=abandon
+    )
 

@@ -31,7 +31,7 @@ def download(repo, filenames=(), revision=None):
 def prepare(config_path):
     for model in load_config(config_path).models.values():
         if model.backend == "llama_cpp":
-            download(model.id, tuple(file for file in (model.gguf, model.mmproj) if file))
+            download(model.hf_repo, tuple(file for file in (model.gguf, model.mmproj) if file))
         elif model.backend == "qwen_image":
             if model.model_revision and not Path(model.model_path).is_absolute():
                 download(model.model_path, revision=model.model_revision)

@@ -6,7 +6,7 @@ import threading
 import traceback
 
 
-def _worker(connection, model):
+def _worker(connection, model, cancelled):
     from .pipeline import QwenImageBackend
 
     try:
@@ -18,7 +18,7 @@ def _worker(connection, model):
             if message is None:
                 return
             try:
-                result = backend.generate(*message)
+                result = backend.generate(*message, cancelled)
                 connection.send((True, result))
             except Exception:
                 connection.send((False, traceback.format_exc()))
@@ -35,6 +35,7 @@ class ImageProcess:
         self.model = model
         self.process = None
         self.connection = None
+        self.cancelled = None
         self.lock = threading.Lock()
 
     def _receive(self, timeout=None):
@@ -51,16 +52,26 @@ class ImageProcess:
     def load(self):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
-        self.process = context.Process(target=_worker, args=(child, self.model), daemon=True)
+        self.cancelled = context.Event()
+        self.process = context.Process(
+            target=_worker, args=(child, self.model, self.cancelled), daemon=True
+        )
         try:
             self.process.start()
         finally:
             child.close()
         self._receive(self.model.startup_timeout)
 
-    def generate(self, options, images):
+    def generate(self, options, images, cancel_request):
         with self.lock:
+            if cancel_request.is_set():
+                return None
+            self.cancelled.clear()
             self.connection.send((options, images))
+            while not self.connection.poll(0.05):
+                if cancel_request.is_set():
+                    self.cancelled.set()
+                    break
             return self._receive()
 
     def unload(self):

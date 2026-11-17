@@ -8,6 +8,10 @@ import threading
 import time
 
 
+class ImageGenerationCancelled(Exception):
+    pass
+
+
 class QwenImageBackend:
     def __init__(self, model):
         self.model = model
@@ -42,28 +46,46 @@ class QwenImageBackend:
         else:
             self.pipe.to("cuda")
 
-    def generate(self, options, images):
+    def generate(self, options, images, cancelled):
         import torch
 
+        def check_step(_pipeline, _step, _timestep, tensors):
+            if cancelled.is_set():
+                raise ImageGenerationCancelled
+            return tensors
+
         with self.lock, torch.inference_mode():
+            if cancelled.is_set():
+                return None
             if options.width is None:
                 ratio = self.size_selector.choose(options.prompt)
                 options.width = round(options.output_resolution * math.sqrt(ratio) / 32) * 32
                 options.height = round(options.output_resolution / math.sqrt(ratio) / 32) * 32
                 options.validate_options()
-            result = self.pipe(
-                prompt=options.prompt, image=images or None,
-                negative_prompt=options.negative_prompt,
-                true_cfg_scale=options.true_cfg_scale,
-                width=options.width, height=options.height,
-                num_inference_steps=options.num_inference_steps,
-                num_images_per_prompt=options.n,
-                output_resolution=options.output_resolution,
-                use_kv_cache=options.use_kv_cache,
-                generator=torch.Generator("cpu").manual_seed(options.seed),
-            )
+            if cancelled.is_set():
+                return None
+            try:
+                result = self.pipe(
+                    prompt=options.prompt, image=images or None,
+                    negative_prompt=options.negative_prompt,
+                    true_cfg_scale=options.true_cfg_scale,
+                    width=options.width, height=options.height,
+                    num_inference_steps=options.num_inference_steps,
+                    num_images_per_prompt=options.n,
+                    output_resolution=options.output_resolution,
+                    use_kv_cache=options.use_kv_cache,
+                    generator=torch.Generator("cpu").manual_seed(options.seed),
+                    callback_on_step_end=check_step,
+                    callback_on_step_end_tensor_inputs=[],
+                )
+            except ImageGenerationCancelled:
+                torch.cuda.synchronize()
+                self.pipe.maybe_free_model_hooks()
+                return None
             data = []
             for img in result.images:
+                if cancelled.is_set():
+                    return None
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 data.append({"b64_json": base64.b64encode(buf.getvalue()).decode("ascii")})

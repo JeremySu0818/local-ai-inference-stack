@@ -6,6 +6,7 @@ import binascii
 import io
 import json
 import math
+import secrets
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
