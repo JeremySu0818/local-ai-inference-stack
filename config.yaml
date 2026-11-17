@@ -14,34 +14,10 @@ models:
   - responses
   startup_timeout_seconds: 900
   stop_timeout_seconds: 30
-- id: cyankiwi/Devstral-Small-2-24B-Instruct-2512-AWQ-4bit
-  command:
-  - /bin/bash
-  - ./model/serve-Devstral-Small-2.sh
-  base_url: http://127.0.0.1:8000/v1
-  health_path: /health
-  endpoints:
-  - chat/completions
-  - completions
-  - responses
-  startup_timeout_seconds: 900
-  stop_timeout_seconds: 30
 - id: RedHatAI/diffusiongemma-26B-A4B-it-NVFP4
   command:
   - /bin/bash
   - ./model/serve-DiffusionGemma-26B-A4B.sh
-  base_url: http://127.0.0.1:8000/v1
-  health_path: /health
-  endpoints:
-  - chat/completions
-  - completions
-  - responses
-  startup_timeout_seconds: 900
-  stop_timeout_seconds: 30
-- id: unsloth/GLM-4.7-Flash-NVFP4
-  command:
-  - /bin/bash
-  - ./model/serve-GLM-4.7-Flash.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
@@ -66,18 +42,6 @@ models:
   command:
   - /bin/bash
   - ./model/serve-Gemma-4-E4B.sh
-  base_url: http://127.0.0.1:8000/v1
-  health_path: /health
-  endpoints:
-  - chat/completions
-  - completions
-  - responses
-  startup_timeout_seconds: 900
-  stop_timeout_seconds: 30
-- id: ibm-granite/granite-4.2-30b-nvfp4
-  command:
-  - /bin/bash
-  - ./model/serve-Granite-4.2-30B.sh
   base_url: http://127.0.0.1:8000/v1
   health_path: /health
   endpoints:
