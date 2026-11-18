@@ -8,13 +8,13 @@ engine can be added or replaced without touching the router.
 from __future__ import annotations
 
 from .base import Backend, DEFAULT_BASE_URL, ENDPOINTS, configure_http
-
+from .edge0 import BACKEND as EDGE0
 from .llama_cpp import BACKEND as LLAMA_CPP
 from .qwen_image import BACKEND as QWEN_IMAGE
 
 HTTP = Backend(name="http", base_url="", configure=configure_http)
 
-BACKENDS = {b.name: b for b in (HTTP, LLAMA_CPP, QWEN_IMAGE)}
+BACKENDS = {b.name: b for b in (HTTP, LLAMA_CPP, EDGE0, QWEN_IMAGE)}
 
 
 def get_backend(name: str) -> Backend:

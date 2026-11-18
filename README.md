@@ -10,7 +10,7 @@
 
 ## 快速開始
 
-安裝需要 `uv`、NVIDIA 驅動、CUDA Toolkit（含 `nvcc`）、CMake 和 C/C++ 編譯工具。首次安裝會下載依賴和已設定的模型，請預留磁碟空間。
+安裝需要 NVIDIA 驅動、CUDA Toolkit（含 `nvcc`）、C/C++ 編譯工具和 `curl`；`uv`、CMake 和 Ninja 會由 `setup.sh` 自動安裝。首次安裝會下載依賴和已設定的模型，請預留磁碟空間（Edge0 145B 的權重約 107 GB）。
 
 在專案目錄執行安裝，完成後啟動服務。
 
@@ -58,6 +58,28 @@ curl http://127.0.0.1:9000/v1/chat/completions \
 ## 推論後端
 
 文字與多模態模型使用 llama.cpp 後端載入 GGUF 權重，並透過 OpenAI 相容 API 提供推論。可用模型和各模型支援的 API 請見 [config/models.yaml](config/models.yaml)。
+
+### Edge0 後端
+
+Edge0 145B 使用 Edge0 自己的推論引擎，不依賴 llama.cpp 或 vLLM：`edge0-infer` 是入口程式，負責啟動 `edge0-strata` 引擎、等待權重載入完成，再在本機埠提供 OpenAI 相容 API。排程器把它當成一般的伺服端後端管理，因此換用其他引擎時不需改動排程器。
+
+- 引擎依本機 GPU 架構編譯（Blackwell SM 12.0），權重為 NVFP4 格式。
+- 需要約 107 GB 磁碟空間存放權重（建議 NVMe），載入後佔用約 30 GB 顯存；載入需數分鐘，因此 `startup_timeout_seconds` 設得比預設值大。
+- 僅支援 `chat/completions` 與 `responses`，不支援文字補全端點。
+- 權重不由專案附帶，`setup.sh` 會從 Hugging Face 下載並校驗檔案。模型依 Edge0 Community Model License 授權（衍生自 Qwen 基礎模型），使用前請先閱讀權重目錄中的 `LICENSE` 與 `NOTICE`。
+
+調整引擎行為的設定寫在模型條目中：
+
+| 設定 | 用途 |
+| --- | --- |
+| `device` | 使用的 GPU，預設 `cuda:0` |
+| `context_size` | 上下文長度上限 |
+| `model_options` | 引擎選項：`du: q8` 或 `q4` 選專家投影權重的格式，`ple-io: direct` 從 SSD 直讀嵌入表、`ram` 則整表鎖進記憶體 |
+| `engine_args` | 直接傳給引擎的參數，例如 `--vram-reserve-mib` 預留顯存 |
+
+引擎會自行設定的參數（如 `--max-context`）不允許在 `engine_args` 中重複指定，設定載入時即會拒絕。
+
+本機已下載過權重時，可以用 `model_path` 指向現有的權重目錄，讓 `setup.sh` 與排程器直接使用它而不另存一份；此時仍會檢查檔案是否完整。
 
 Qwen Image 2.1 後端以 Diffusers 的 pipeline 和模型元件為基礎，提供圖片生成與編輯，並針對原生 checkpoint、Blackwell SM 12.0 和 PyTorch 2.14.0 啟用自訂推論路徑：
 

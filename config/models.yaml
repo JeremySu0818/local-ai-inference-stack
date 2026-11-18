@@ -66,3 +66,19 @@ models:
   - images/generations
   - images/edits
   model_revision: d26bb61231c349cf6b7896fa83353113880e1ba3
+- id: Edge0-145B
+  backend: edge0
+  hf_repo: Edge0/Edge0-145B-NVFP4
+  device: cuda:0
+  context_size: 262144
+  model_options:
+    du: q8
+    ple-io: direct
+  engine_args:
+  - --vram-reserve-mib
+  - "2048"
+  endpoints:
+  - chat/completions
+  - responses
+  startup_timeout_seconds: 2100
+  stop_timeout_seconds: 60

@@ -6,7 +6,7 @@ a package and one entry to ``BACKENDS``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import shlex
 from typing import Any, Callable
@@ -48,7 +48,10 @@ class Backend:
     server: str = ""
     base_url: str = DEFAULT_BASE_URL
     endpoints: tuple[str, ...] = ENDPOINTS
+    options: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    reserved_args: tuple[str, ...] = ()
     local_model: bool = False
+    ready_timeout: float = 0.0
     configure: Callable[[dict], dict[str, Any]] | None = None
     process: Callable[[Any], Any] | None = None
     parse: Callable[[str, bytes, str], Any] | None = None

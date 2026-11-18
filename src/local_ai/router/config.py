@@ -33,6 +33,9 @@ class Model:
     mmproj: str | None = None
     context_size: int | None = None
     parallel: int = 1
+    device: str | None = None
+    model_options: tuple[str, ...] = ()
+    engine_args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,9 @@ def load_config(path: str) -> Config:
         except ValueError as exc:
             raise ValueError(f"{mid}: {exc}") from exc
 
+        # Everything that belongs to this backend, before anything generic: a
+        # missing engine setting is the reason an entry is wrong, not the endpoint
+        # list that happens to sit next to it.
         configured = spec.configure(item) if spec.configure is not None else {}
 
         cpu_offload = item.get("cpu_offload", False)
@@ -69,6 +75,23 @@ def load_config(path: str) -> Config:
         model_path = item.get("model_path") if spec.local_model else None
         if model_path and (not item.get("model_revision") or model_path.startswith(("/", ".", "~"))):
             model_path = str(Path(model_path).expanduser().resolve())
+
+        options = item.get("model_options", {})
+        if not isinstance(options, dict) or set(options) - set(spec.options):
+            if not spec.options:
+                raise ValueError(f"{mid}: the {spec.name} backend accepts no model options")
+            raise ValueError(f"{mid}: model_options must use {' '.join(spec.options)}")
+        for name, value in options.items():
+            allowed = spec.options[name]
+            if not isinstance(value, str) or value not in allowed:
+                raise ValueError(f"{mid}: model_options {name} must be {'|'.join(allowed)}")
+        engine_args = tuple(item.get("engine_args", []))
+        if any(not isinstance(word, str) or not word for word in engine_args):
+            raise ValueError(f"{mid}: engine_args must be a list of non-empty strings")
+        reserved = set(spec.reserved_args)
+        for word in engine_args:
+            if word in reserved:
+                raise ValueError(f"{mid}: {word} is set by the {spec.name} backend")
 
         ep = tuple(item.get("endpoints", ["chat/completions"]))
         if not ep or any(x not in spec.endpoints for x in ep):
@@ -82,6 +105,11 @@ def load_config(path: str) -> Config:
         )
         if min(start, stop) <= 0:
             raise ValueError("timeouts must be positive")
+        if start <= spec.ready_timeout:
+            raise ValueError(
+                f"{mid}: startup_timeout_seconds must outlast the {spec.name} "
+                f"engine's {spec.ready_timeout:g}s readiness wait"
+            )
 
         fields = {
             "id": mid,
@@ -96,6 +124,8 @@ def load_config(path: str) -> Config:
             "model_path": model_path,
             "model_revision": item.get("model_revision"),
             "cpu_offload": cpu_offload,
+            "model_options": tuple(f"{name}={value}" for name, value in options.items()),
+            "engine_args": engine_args,
             **configured,
         }
         if spec.server:
