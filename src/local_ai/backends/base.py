@@ -68,7 +68,7 @@ def configure_http(item: dict) -> dict[str, Any]:
     mid = item["id"]
     return {
         "command": command(item.get("command", []), mid),
-        "base_url": item.get("base_url", "").rstrip("/"),
+        "base_url": item.get("base_url", ""),
         "cwd": item.get("cwd"),
     }
 

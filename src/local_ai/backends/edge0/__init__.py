@@ -17,12 +17,41 @@ from urllib.parse import urlsplit
 from ..base import Backend, download, repository
 
 REVISION = "4a7964de4b337532aad74b03714125deb7506e70"
-CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-SOURCE_DIR = CACHE_ROOT / "local-ai-inference-stack" / f"edge0-{REVISION[:7]}"
-INFER = SOURCE_DIR / "edge0-infer/build/cpu/bin/edge0-infer"
-STRATA_DIR = SOURCE_DIR / "edge0-strata"
-STRATA = STRATA_DIR / "build/strata"
-STRATA_PYTHON = STRATA_DIR / ".venv/bin/python"
+
+
+def cache_root() -> Path:
+    """The shared cache the build lives in, resolved only when a path is needed.
+
+    The registry imports this package into the router, so ``Path.home()`` must
+    not run at import time: a process with no ``HOME`` and no passwd entry for
+    its UID would otherwise fail to start even an HTTP-only router.
+    """
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+
+
+def source_dir() -> Path:
+    """The Edge0 build this revision expects."""
+    return cache_root() / "local-ai-inference-stack" / f"edge0-{REVISION[:7]}"
+
+
+def infer() -> Path:
+    """The edge0-infer portal the backend launches."""
+    return source_dir() / "edge0-infer/build/cpu/bin/edge0-infer"
+
+
+def strata_dir() -> Path:
+    """The edge0-strata directory the portal starts."""
+    return source_dir() / "edge0-strata"
+
+
+def strata() -> Path:
+    """The strata engine binary inside the strata directory."""
+    return strata_dir() / "build/strata"
+
+
+def strata_python() -> Path:
+    """The interpreter the portal uses to start strata."""
+    return strata_dir() / ".venv/bin/python"
 
 DEFAULT_DEVICE = "cuda:0"
 READY_TIMEOUT = 1800.0
@@ -73,7 +102,7 @@ def model_dir(model) -> str:
 def engine_args(model, path: str, command: str) -> list[str]:
     """The edge0-infer command line for a model directory."""
     u = urlsplit(model.base_url)
-    args = [str(INFER), command, "--model", path]
+    args = [str(infer()), command, "--model", path]
     for option in model.model_options:
         args.extend(("--model-option", option))
     if command == "inspect":
@@ -83,7 +112,7 @@ def engine_args(model, path: str, command: str) -> list[str]:
         args.extend(("--device", model.device))
     if model.context_size:
         args.extend(("--context", str(model.context_size)))
-    args.extend(("--strata-dir", str(STRATA_DIR), "--strata-python", str(STRATA_PYTHON)))
+    args.extend(("--strata-dir", str(strata_dir()), "--strata-python", str(strata_python())))
     for word in model.engine_args:
         args.extend(("--strata-arg", word))
     return args

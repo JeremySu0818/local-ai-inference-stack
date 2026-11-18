@@ -19,6 +19,8 @@ BACKENDS = {b.name: b for b in (HTTP, LLAMA_CPP, EDGE0, QWEN_IMAGE)}
 
 def get_backend(name: str) -> Backend:
     """The declaration for a backend name, or a message naming the names that exist."""
+    if not isinstance(name, str):
+        raise ValueError(f"unsupported backend: {name}")
     backend = BACKENDS.get(name)
     if backend is None:
         raise ValueError(f"unsupported backend: {name}")

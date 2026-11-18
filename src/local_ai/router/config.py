@@ -60,6 +60,8 @@ def load_config(path: str) -> Config:
             spec = get_backend(item.get("backend", "http"))
         except ValueError as exc:
             raise ValueError(f"{mid}: {exc}") from exc
+        if spec.native and spec.parse is None:
+            raise ValueError(f"{mid}: the {spec.name} backend must declare a parse hook")
 
         configured = spec.configure(item) if spec.configure is not None else {}
 
@@ -131,7 +133,10 @@ def load_config(path: str) -> Config:
             )
             fields["base_url"] = spec.base_url
         if not spec.native:
+            # Validate the declared URL before dropping a trailing slash: stripping
+            # first would turn a query like "?/" into an empty one that passes.
             loopback(fields["base_url"], mid)
+            fields["base_url"] = fields["base_url"].rstrip("/")
         models[mid] = Model(**fields)
     if not models:
         raise ValueError("at least one model required")

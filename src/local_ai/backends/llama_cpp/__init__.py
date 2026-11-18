@@ -7,9 +7,26 @@ from pathlib import Path
 from ..base import Backend, download, repository
 
 VERSION = "v1.0.0"
-CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-SOURCE_DIR = CACHE_ROOT / "local-ai-inference-stack" / f"llama.cpp-{VERSION}"
-SERVER = SOURCE_DIR / "build/bin/llama-server"
+
+
+def cache_root() -> Path:
+    """The shared cache the build lives in, resolved only when a path is needed.
+
+    The registry imports this package into the router, so ``Path.home()`` must
+    not run at import time: a process with no ``HOME`` and no passwd entry for
+    its UID would otherwise fail to start even an HTTP-only router.
+    """
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+
+
+def source_dir() -> Path:
+    """The llama.cpp build this revision expects."""
+    return cache_root() / "local-ai-inference-stack" / f"llama.cpp-{VERSION}"
+
+
+def server_path() -> Path:
+    """The llama-server binary the backend launches."""
+    return source_dir() / "build/bin/llama-server"
 
 
 def configure(item: dict) -> dict:

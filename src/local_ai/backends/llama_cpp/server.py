@@ -4,17 +4,18 @@ import os
 from local_ai.router.config import load_config
 
 from ..base import cached_file
-from . import SERVER
+from . import server_path
 
 
 def serve(config_path, model_id):
     model = load_config(config_path).models[model_id]
     if model.backend != "llama_cpp":
         raise SystemExit(f"{model_id} is not a llama.cpp model")
-    if not os.access(SERVER, os.X_OK):
+    server = server_path()
+    if not os.access(server, os.X_OK):
         raise SystemExit("llama-server is missing. Run ./setup.sh")
 
-    args = [str(SERVER)]
+    args = [str(server)]
     for flag, filename in (("-m", model.gguf), ("--mmproj", model.mmproj)):
         if filename is not None:
             path = cached_file(model.hf_repo, filename)
@@ -29,4 +30,4 @@ def serve(config_path, model_id):
         "--n-gpu-layers", "all", "--fit", "off", "--flash-attn", "on",
         "--cache-type-k", "q8_0", "--cache-type-v", "q8_0", "--jinja",
     ))
-    os.execv(SERVER, args)
+    os.execv(server, args)

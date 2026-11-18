@@ -54,6 +54,7 @@ class InferenceResponse(StreamingResponse):
 
 async def stream_inference(request, model, endpoint, body, parsed):
     mid = model.id
+    spec = get_backend(model.backend)
     headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
     url = model.base_url + "/" + endpoint
     if request.url.query:
@@ -84,11 +85,10 @@ async def stream_inference(request, model, endpoint, body, parsed):
         lease = None
         failed = False
         try:
-            spec = get_backend(model.backend)
             load_hint = spec.load_hint(parsed) if spec.load_hint is not None else None
             lease = await request.app.state.scheduler.acquire(mid, load_hint)
             admitted.set()
-            if parsed is not None:
+            if spec.native:
                 result = await asyncio.to_thread(
                     request.app.state.scheduler.engine.generate, *parsed, engine_cancel
                 )
@@ -150,7 +150,7 @@ async def stream_inference(request, model, endpoint, body, parsed):
             return
         abandoned.set()
         engine_cancel.set()
-        if producing and (parsed is None or not admitted.is_set()):
+        if producing and (not spec.native or not admitted.is_set()):
             task.cancel()
 
     async def watch_disconnect():
