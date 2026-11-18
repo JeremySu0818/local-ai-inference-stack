@@ -9,4 +9,4 @@ if __name__ == "__main__":
     elif len(sys.argv) == 4 and sys.argv[1] == "serve":
         serve(*sys.argv[2:])
     else:
-        raise SystemExit("Usage: python -m backends.llama_cpp source-dir | serve CONFIG MODEL_ID")
+        raise SystemExit("Usage: python -m local_ai.backends.llama_cpp source-dir | serve CONFIG MODEL_ID")

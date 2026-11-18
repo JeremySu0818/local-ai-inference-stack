@@ -12,10 +12,11 @@ fi
 cd "$ROOT_DIR"
 uv venv --python 3.12 --allow-existing "$VENV_DIR"
 uv pip sync --torch-backend=cu132 "$ROOT_DIR/requirements/locked.txt"
+uv pip install -e "$ROOT_DIR"
 
 PYTHON="$VENV_DIR/bin/python"
-LLAMA_DIR=$("$PYTHON" -m backends.llama_cpp source-dir)
-bash "$ROOT_DIR/backends/llama_cpp/build.sh" "$LLAMA_DIR"
+LLAMA_DIR=$("$PYTHON" -m local_ai.backends.llama_cpp source-dir)
+bash "$ROOT_DIR/src/local_ai/backends/llama_cpp/build.sh" "$LLAMA_DIR"
 "$PYTHON" -m scripts.prepare_models "${AI_ROUTER_CONFIG:-$ROOT_DIR/config/models.yaml}"
 
 printf 'Environment ready: %s\n' "$VENV_DIR"

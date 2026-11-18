@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-ai-inference-stack"
+version = "0.1.0"
+description = "Local AI inference stack: OpenAI-compatible router with llama.cpp and Qwen Image backends"
+readme = "README.md"
+requires-python = ">=3.12"
+
+# 執行時依賴由 requirements/locked.txt 與 setup.sh 管理，
+# 此處不重複宣告，uv pip install -e . 只安裝本專案的 Python 套件。
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"local_ai.router" = ["router.yaml"]

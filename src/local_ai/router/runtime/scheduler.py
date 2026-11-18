@@ -187,7 +187,7 @@ class Scheduler:
 
     async def _start(self, m: Model, image_prompt=None):
         if m.backend == "qwen_image":
-            from backends.qwen_image.runtime.process import ImageProcess
+            from local_ai.backends.qwen_image.runtime.process import ImageProcess
             log.info("loading native image model: %s", m.id)
             self.native = ImageProcess(m)
             await asyncio.to_thread(self.native.load, image_prompt)

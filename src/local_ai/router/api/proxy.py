@@ -63,7 +63,7 @@ async def proxy(endpoint: str, request: Request):
         return error("Endpoint not enabled for this model", 404)
     native_input = None
     if m.backend == "qwen_image":
-        from backends.qwen_image.api.request import parse_request
+        from local_ai.backends.qwen_image.api.request import parse_request
         try:
             native_input = await parse_request(endpoint, bytes(body), ctype)
         except (ValueError, TypeError) as exc:

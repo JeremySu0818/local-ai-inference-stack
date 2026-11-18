@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 import sys
 from typing import Literal
@@ -7,7 +8,7 @@ from urllib.parse import urlsplit
 import yaml
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 ROUTER_CONFIG = PROJECT_ROOT / "config/router.yaml"
 
 
@@ -88,7 +89,7 @@ def load_config(path: str) -> Config:
                 raise ValueError(f"{mid}: invalid mmproj filename")
             if type(item.get("context_size")) is not int or item["context_size"] <= 0:
                 raise ValueError(f"{mid}: context_size must be a positive integer")
-            cmd = [sys.executable, "-m", "backends.llama_cpp", "serve", str(Path(path).resolve()), mid]
+            cmd = [sys.executable, "-m", "local_ai.backends.llama_cpp", "serve", str(Path(path).resolve()), mid]
         else:
             cmd = item.get("command", [])
         if not native and (
@@ -147,7 +148,12 @@ def load_config(path: str) -> Config:
         )
     if not models:
         raise ValueError("at least one model required")
-    with ROUTER_CONFIG.open(encoding="utf-8") as f:
+    runtime_config = ROUTER_CONFIG
+    state_root = PROJECT_ROOT
+    if not runtime_config.is_file():
+        runtime_config = files("local_ai.router").joinpath("router.yaml")
+        state_root = Path.cwd()
+    with runtime_config.open(encoding="utf-8") as f:
         runtime = yaml.safe_load(f)
     if not isinstance(runtime, dict):
         raise ValueError("router configuration must be a mapping")
@@ -158,6 +164,6 @@ def load_config(path: str) -> Config:
         raise ValueError("limits must be positive")
     state_dir = (
         Path(raw["state_dir"]).expanduser() if "state_dir" in raw
-        else PROJECT_ROOT / Path(runtime["state_dir"]).expanduser()
+        else state_root / Path(runtime["state_dir"]).expanduser()
     )
     return Config(models, q, t, state_dir.resolve())

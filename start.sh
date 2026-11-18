@@ -17,7 +17,7 @@ fi
 cd "$ROOT_DIR"
 export AI_ROUTER_CONFIG="$CONFIG_PATH"
 
-exec "$UVICORN" router.app:app_factory \
+exec "$UVICORN" local_ai.router.app:app_factory \
   --factory \
   --host "${AI_ROUTER_HOST:-0.0.0.0}" \
   --port "${AI_ROUTER_PORT:-9000}" \

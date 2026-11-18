@@ -4,7 +4,7 @@ from pathlib import Path
 
 from huggingface_hub import try_to_load_from_cache
 
-from router.config import load_config
+from local_ai.router.config import load_config
 
 VERSION = "v1.0.0"
 CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
