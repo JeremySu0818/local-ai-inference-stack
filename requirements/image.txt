@@ -1,6 +1,7 @@
-torch>=2.4
-torchvision
-transformers>=5.17
+torch==2.14.0+cu132
+torchvision==0.29.2+cu132
+transformers==5.20.2
+triton==3.8.0
 accelerate
 Pillow
 diffusers @ git+https://github.com/huggingface/diffusers.git@1dabc292d8413638cf0666cca6d7a6c2c765befa

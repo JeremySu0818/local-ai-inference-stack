@@ -19,6 +19,14 @@
 ./start.sh
 ```
 
+`setup.sh` 依照 `requirements/locked.txt` 安裝固定版本，鎖檔適用於 Linux x86-64、Python 3.12 和 CUDA 13.2。需要新增或調整 Python 依賴時，先修改 `requirements/base.txt` 或 `requirements/image.txt`，再於專案目錄更新鎖檔：
+
+```bash
+uv pip compile --torch-backend=cu132 --python-version 3.12 --python-platform x86_64-manylinux_2_28 --emit-index-url --no-annotate --no-header requirements/base.txt -o requirements/locked.txt
+```
+
+修改 requirements 後必須重新產生鎖檔，再執行 `./setup.sh` 安裝新的依賴版本。
+
 服務預設監聽 `0.0.0.0:9000`。在本機連線時，將用戶端的 API Base URL 設為 `http://127.0.0.1:9000/v1`。從區網內其他裝置連線時，將 `127.0.0.1` 換成主機 IP。
 
 **需要開機自動啟動？** 請參閱 [systemd 與 tmux 設定指南](docs/systemd.md)。

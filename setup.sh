@@ -11,7 +11,7 @@ fi
 
 cd "$ROOT_DIR"
 uv venv --python 3.12 --allow-existing "$VENV_DIR"
-uv pip install --torch-backend=auto -r "$ROOT_DIR/requirements/base.txt"
+uv pip sync --torch-backend=cu132 "$ROOT_DIR/requirements/locked.txt"
 
 PYTHON="$VENV_DIR/bin/python"
 LLAMA_DIR=$("$PYTHON" -m backends.llama_cpp source-dir)
