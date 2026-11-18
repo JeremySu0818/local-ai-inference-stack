@@ -1,12 +1,31 @@
 """llama.cpp backend: GGUF models served by llama-server."""
 from __future__ import annotations
 
+import base64
+import json
+import math
 import os
 from pathlib import Path
+import struct
 
 from ..base import Backend, download, repository
 
 VERSION = "v1.0.0"
+
+# The flags server.py sets itself and their aliases in llama.cpp's common/arg.cpp.
+RESERVED_ARGS = (
+    "-m", "--model", "-mm", "--mmproj", "-a", "--alias", "--host", "--port",
+    "-c", "--ctx-size", "-np", "--parallel",
+    "-kvu", "--kv-unified", "-no-kvu", "--no-kv-unified",
+    "-ngl", "--gpu-layers", "--n-gpu-layers", "-fit", "--fit",
+    "-fa", "--flash-attn", "-ctk", "--cache-type-k", "-ctv", "--cache-type-v",
+    "--jinja", "--no-jinja", "--embedding", "--embeddings",
+    "-b", "--batch-size", "-ub", "--ubatch-size",
+)
+
+
+def normalize_engine_arg(word: str) -> str:
+    return word.replace("_", "-") if word.startswith("--") else word
 
 
 def cache_root() -> Path:
@@ -43,6 +62,21 @@ def configure(item: dict) -> dict:
     parallel = item.get("parallel", 1)
     if type(parallel) is not int or not 1 <= parallel <= 256:
         raise ValueError(f"{mid}: parallel must be an integer from 1 to 256")
+    dimensions = item.get("embedding_dimensions", [])
+    if "embedding_dimensions" in item:
+        if "embeddings" not in item.get("endpoints", []):
+            raise ValueError(f"{mid}: embedding_dimensions requires the embeddings endpoint")
+        if (
+            not isinstance(dimensions, list)
+            or not dimensions
+            or any(type(size) is not int or size <= 0 for size in dimensions)
+            or len(set(dimensions)) != len(dimensions)
+            or dimensions[0] != max(dimensions)
+        ):
+            raise ValueError(
+                f"{mid}: embedding_dimensions must list the native dimension first, "
+                "followed by any supported smaller dimensions"
+            )
     return {
         "cwd": None,
         "hf_repo": repository(item.get("hf_repo", mid), mid),
@@ -50,6 +84,7 @@ def configure(item: dict) -> dict:
         "mmproj": mmproj,
         "context_size": item["context_size"],
         "parallel": parallel,
+        "embedding_dimensions": tuple(dimensions),
     }
 
 
@@ -58,9 +93,65 @@ def prepare(model) -> None:
     download(model.hf_repo, tuple(f for f in (model.gguf, model.mmproj) if f))
 
 
+async def parse(model, endpoint: str, body: bytes, content_type: str) -> tuple[int, int] | None:
+    """Validate an embeddings request and return native and target sizes for truncation."""
+    if endpoint != "embeddings":
+        return None
+    if not content_type.lower().startswith("application/json"):
+        raise ValueError("embeddings requests require application/json")
+    request = json.loads(body)
+    if not isinstance(request, dict):
+        raise ValueError("embeddings requests require a JSON object")
+    dimensions = request.get("dimensions")
+    if dimensions is not None and request.get("input") is None:
+        raise ValueError("dimensions requires a non-null input field")
+    if request.get("input", request.get("content")) is None:
+        raise ValueError("embeddings require a non-null input or content field")
+    if dimensions is None:
+        return None
+    supported = model.embedding_dimensions
+    if not supported:
+        raise ValueError("dimensions is not configured for this model")
+    if type(dimensions) is not int or dimensions not in supported:
+        raise ValueError(
+            f"dimensions must be one of {', '.join(map(str, supported))}"
+        )
+    native = supported[0]
+    return None if dimensions == native else (native, dimensions)
+
+
+def transform(body: bytes, sizes: tuple[int, int]) -> bytes:
+    """Truncate Matryoshka embeddings and renormalize each resulting vector."""
+    native, dimensions = sizes
+    response = json.loads(body)
+    for item in response["data"]:
+        vector = item["embedding"]
+        encoded = isinstance(vector, str)
+        if encoded:
+            raw = base64.b64decode(vector, validate=True)
+            vector = [value for (value,) in struct.iter_unpack("<f", raw)]
+        if not isinstance(vector, list) or len(vector) != native:
+            raise ValueError(f"upstream embedding must contain {native} dimensions")
+        shortened = _unit(vector[:dimensions])
+        item["embedding"] = (
+            base64.b64encode(struct.pack(f"<{dimensions}f", *shortened)).decode("ascii")
+            if encoded else shortened
+        )
+    return json.dumps(response).encode()
+
+
+def _unit(values):
+    norm = math.sqrt(sum(value * value for value in values))
+    return [value / norm for value in values] if norm else list(values)
+
+
 BACKEND = Backend(
     name="llama_cpp",
     server="local_ai.backends.llama_cpp",
+    reserved_args=RESERVED_ARGS,
+    normalize_engine_arg=normalize_engine_arg,
     configure=configure,
+    parse=parse,
+    transform=transform,
     prepare=prepare,
 )

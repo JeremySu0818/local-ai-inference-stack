@@ -66,6 +66,16 @@ models:
   - images/generations
   - images/edits
   model_revision: d26bb61231c349cf6b7896fa83353113880e1ba3
+- id: embeddinggemma-2
+  backend: llama_cpp
+  hf_repo: ggml-org/embeddinggemma-2-GGUF
+  gguf: embeddinggemma-2-Q8_0.gguf
+  context_size: 8192
+  parallel: 1
+  embedding_dimensions: [768, 512, 256, 128]
+  endpoints:
+  - embeddings
+  startup_timeout_seconds: 120
 - id: Edge0-145B
   backend: edge0
   hf_repo: Edge0/Edge0-145B-NVFP4

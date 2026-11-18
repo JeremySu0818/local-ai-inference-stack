@@ -66,6 +66,9 @@ async def stream_inference(request, model, endpoint, body, parsed):
     admitted = asyncio.Event()
     engine_cancel = threading.Event()
     producing = True
+    transform = (
+        spec.transform if spec.transform is not None and parsed is not None else None
+    )
     ready.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
 
     async def put(item):
@@ -106,10 +109,25 @@ async def stream_inference(request, model, endpoint, body, parsed):
                     if k.lower() not in HOP
                     and k.lower() not in ("content-encoding",)
                 }
+                if transform is None or resp.status_code >= 400:
+                    if not ready.done():
+                        ready.set_result((resp.status_code, response_headers))
+                    async for chunk in resp.aiter_bytes():
+                        await put(chunk)
+                    return
+                # Rewriting needs the whole body, and the length the engine
+                # promised no longer describes it; content-length is already
+                # dropped from everything the router forwards.  A batch of
+                # several hundred vectors is megabytes of JSON, so parse it
+                # off the loop: holding the event loop would stall health
+                # checks and disconnect detection for every other request.
+                payload = bytearray()
+                async for chunk in resp.aiter_bytes():
+                    payload.extend(chunk)
+                rewritten = await asyncio.to_thread(transform, bytes(payload), parsed)
                 if not ready.done():
                     ready.set_result((resp.status_code, response_headers))
-                async for chunk in resp.aiter_bytes():
-                    await put(chunk)
+                await put(rewritten)
         except asyncio.CancelledError:
             failed = lease is not None and not abandoned.is_set()
             if not ready.done():

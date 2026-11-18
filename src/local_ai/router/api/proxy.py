@@ -66,7 +66,7 @@ async def proxy(endpoint: str, request: Request):
     parsed = None
     if spec.parse is not None:
         try:
-            parsed = await spec.parse(endpoint, bytes(body), ctype)
+            parsed = await spec.parse(m, endpoint, bytes(body), ctype)
         except (ValueError, TypeError) as exc:
             return error(str(exc), 400)
     return await stream_inference(request, m, endpoint, body, parsed)

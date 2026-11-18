@@ -36,6 +36,7 @@ class Model:
     device: str | None = None
     model_options: tuple[str, ...] = ()
     engine_args: tuple[str, ...] = ()
+    embedding_dimensions: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,8 +89,9 @@ def load_config(path: str) -> Config:
         if any(not isinstance(word, str) or not word for word in engine_args):
             raise ValueError(f"{mid}: engine_args must be a list of non-empty strings")
         reserved = set(spec.reserved_args)
+        normalize = spec.normalize_engine_arg
         for word in engine_args:
-            if word in reserved:
+            if (normalize(word) if normalize is not None else word) in reserved:
                 raise ValueError(f"{mid}: {word} is set by the {spec.name} backend")
 
         ep = tuple(item.get("endpoints", ["chat/completions"]))

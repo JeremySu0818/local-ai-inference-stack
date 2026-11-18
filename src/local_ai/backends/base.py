@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import shlex
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 
 ENDPOINTS = (
@@ -37,11 +37,18 @@ class Backend:
 
     A backend without a server is *native*: ``process`` builds an object with
     ``load``, ``generate`` and ``unload`` that runs in a worker of its own,
-    ``parse`` turns a request body into the arguments of ``generate``, and
-    ``load_hint`` picks a hint to pass to a cold ``load``.
+    ``parse`` uses the selected model and request to build the arguments of
+    ``generate``, and ``load_hint`` picks a hint to pass to a cold ``load``.
+
+    A server backend may still declare ``parse`` to inspect a request before
+    forwarding it, and then ``transform`` to rewrite the upstream body for
+    whatever ``parse`` returned; a response that is not rewritten streams
+    through unchanged.
 
     ``configure`` validates the keys that belong to this backend and returns the
     ``Model`` fields they produce; ``prepare`` fetches and checks its assets.
+    ``normalize_engine_arg`` applies the engine's flag spelling rules before
+    checking ``reserved_args``.
     """
 
     name: str
@@ -50,11 +57,13 @@ class Backend:
     endpoints: tuple[str, ...] = ENDPOINTS
     options: dict[str, tuple[str, ...]] = field(default_factory=dict)
     reserved_args: tuple[str, ...] = ()
+    normalize_engine_arg: Callable[[str], str] | None = None
     local_model: bool = False
     ready_timeout: float = 0.0
     configure: Callable[[dict], dict[str, Any]] | None = None
     process: Callable[[Any], Any] | None = None
-    parse: Callable[[str, bytes, str], Any] | None = None
+    parse: Callable[[Any, str, bytes, str], Awaitable[Any]] | None = None
+    transform: Callable[[bytes, Any], bytes] | None = None
     load_hint: Callable[[Any], str | None] | None = None
     prepare: Callable[[Any], None] | None = None
 

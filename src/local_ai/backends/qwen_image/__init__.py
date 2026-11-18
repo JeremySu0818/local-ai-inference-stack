@@ -20,7 +20,7 @@ def process(model):
     return ImageProcess(model)
 
 
-async def parse(endpoint: str, body: bytes, content_type: str):
+async def parse(_model, endpoint: str, body: bytes, content_type: str):
     """Turn an images request into the arguments of ``generate``."""
     from .api.request import parse_request
 

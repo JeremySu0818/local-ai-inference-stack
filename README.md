@@ -1,6 +1,6 @@
 # Local AI Inference Stack
 
-針對搭載 **NVIDIA RTX PRO 4500** 的單機推論環境設計。透過同一個 OpenAI 相容 API，可使用本地模型進行對話、文字補全、Responses、圖片生成與編輯。
+針對搭載 **NVIDIA RTX PRO 4500** 的單機推論環境設計。透過同一個 OpenAI 相容 API，可使用本地模型進行對話、文字補全、Responses、圖片生成與編輯、文字轉向量。
 
 ## 排程管理
 
@@ -48,6 +48,14 @@ curl http://127.0.0.1:9000/v1/chat/completions \
   -d '{"model":"gemma-4-E2B-it","messages":[{"role":"user","content":"你好"}]}'
 ```
 
+生成文字向量。向量資料庫會先載入 `embeddinggemma-2`，因此第一次請求比平常慢。
+
+```bash
+curl http://127.0.0.1:9000/v1/embeddings \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"embeddinggemma-2","input":"如何重設密碼？"}'
+```
+
 ## 調整設定
 
 - [config/models.yaml](config/models.yaml) 定義可用模型、模型 ID 和各模型支援的 API。新增模型或變更模型檔案後，重新執行 `./setup.sh` 以準備模型。
@@ -58,6 +66,29 @@ curl http://127.0.0.1:9000/v1/chat/completions \
 ## 推論後端
 
 文字與多模態模型使用 llama.cpp 後端載入 GGUF 權重，並透過 OpenAI 相容 API 提供推論。可用模型和各模型支援的 API 請見 [config/models.yaml](config/models.yaml)。
+
+### 文字轉向量
+
+`embeddinggemma-2` 使用 `ggml-org/embeddinggemma-2-GGUF` 的 Q8_0（310 MB），回傳 768 維、已 L2 正規化的向量，上下文 8192 token。
+
+向量模型和對話模型共用同一塊顯存，由排程器按需載入：佇列輪到它時才載入，輪到別的模型時卸載。所以「問一句、搜一次、再生成一次」這種用法會反覆載入模型，搜尋密集的工作最好一次傳送整批文字。
+
+EmbeddingGemma 2 使用雙向注意力，輸入超過批次大小會直接失敗。統一 KV 快取讓單一槽位能使用完整的設定上下文，因此 `--batch-size` 和 `--ubatch-size` 都設為 `context_size`。
+
+模型訓練時帶有任務前綴，加上來品質更好，省略也能用：
+
+| 用途 | 前綴 |
+| --- | --- |
+| 搜尋的查詢 | `task: search result \| query: {query}` |
+| 搜尋的文件 | `title: {title} \| text: {content}` |
+| 問答的查詢 | `task: question answering \| query: {question}` |
+| 分類、聚類、相似度 | `task: classification \| query: {content}` |
+
+請求帶有 `input` 時，可用 `dimensions` 指定輸出維度。`embeddinggemma-2` 接受 `768`、`512`、`256`、`128`。要求較短的向量時，router 會取向量的前 `n` 個值並重新正規化。使用 llama.cpp 原生的 `content` 欄位時，請省略 `dimensions`。
+
+其他 llama.cpp 向量模型可用 `embedding_dimensions` 宣告原生維度與支援的縮減維度。第一個值是原生維度，例如固定 384 維的模型填 `[384]`。只有模型支援向量截斷時才列入較小的維度。省略設定仍可取得原生向量，帶有 `dimensions` 的請求會收到 400。
+
+只有一處與官方文件不同：`input` 只接受文字或文字陣列，不接受圖片和音訊的內容項目（官方端點也不支援）。
 
 ### Edge0 後端
 
