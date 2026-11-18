@@ -1,4 +1,3 @@
-"""Keep image inference's CUDA context out of the long-lived router."""
 from __future__ import annotations
 
 import multiprocessing
@@ -6,12 +5,12 @@ import threading
 import traceback
 
 
-def _worker(connection, model, cancelled):
-    from .pipeline import QwenImageBackend
+def _worker(connection, model, cancelled, first_prompt):
+    from ..inference.generation import QwenImageBackend
 
     try:
         backend = QwenImageBackend(model)
-        backend.load()
+        backend.load(first_prompt)
         connection.send((True, None))
         while True:
             message = connection.recv()
@@ -49,12 +48,12 @@ class ImageProcess:
             raise RuntimeError(result)
         return result
 
-    def load(self):
+    def load(self, first_prompt=None):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
         self.cancelled = context.Event()
         self.process = context.Process(
-            target=_worker, args=(child, self.model, self.cancelled), daemon=True
+            target=_worker, args=(child, self.model, self.cancelled, first_prompt), daemon=True
         )
         try:
             self.process.start()

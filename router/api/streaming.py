@@ -83,7 +83,10 @@ async def stream_inference(request, model, endpoint, body, native_input):
         lease = None
         failed = False
         try:
-            lease = await request.app.state.scheduler.acquire(mid)
+            image_prompt = None
+            if native_input is not None and native_input[0].width is None:
+                image_prompt = native_input[0].prompt
+            lease = await request.app.state.scheduler.acquire(mid, image_prompt)
             admitted.set()
             if native_input is not None:
                 result = await asyncio.to_thread(

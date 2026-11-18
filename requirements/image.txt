@@ -4,3 +4,4 @@ transformers>=5.17
 accelerate
 Pillow
 diffusers @ git+https://github.com/huggingface/diffusers.git@1dabc292d8413638cf0666cca6d7a6c2c765befa
+fastsafetensors==0.5.0; sys_platform == "linux" and platform_machine == "x86_64"

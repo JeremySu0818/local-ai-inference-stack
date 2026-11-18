@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import sys
+from typing import Literal
 from urllib.parse import urlsplit
 import yaml
 
@@ -22,7 +23,7 @@ class Model:
     cwd: str | None
     backend: str = "http"
     model_path: str | None = None
-    cpu_offload: bool = False
+    cpu_offload: bool | Literal["auto"] = False
     model_revision: str | None = None
     hf_repo: str | None = None
     gguf: str | None = None
@@ -120,6 +121,11 @@ def load_config(path: str) -> Config:
         )
         if min(start, stop) <= 0:
             raise ValueError("timeouts must be positive")
+        cpu_offload = item.get("cpu_offload", False)
+        if not native:
+            cpu_offload = bool(cpu_offload)
+        elif type(cpu_offload) is not bool and cpu_offload != "auto":
+            raise ValueError(f"{mid}: cpu_offload must be true, false, or auto")
         models[mid] = Model(
             id=mid,
             command=tuple(cmd),
@@ -131,7 +137,7 @@ def load_config(path: str) -> Config:
             cwd=None if llama else item.get("cwd"),
             backend=backend,
             model_path=model_path,
-            cpu_offload=bool(item.get("cpu_offload", False)),
+            cpu_offload=cpu_offload,
             model_revision=item.get("model_revision"),
             hf_repo=hf_repo,
             gguf=item.get("gguf"),

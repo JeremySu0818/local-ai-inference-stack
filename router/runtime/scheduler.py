@@ -26,6 +26,7 @@ class State(str, enum.Enum):
 class Waiter:
     model: str
     future: asyncio.Future
+    image_prompt: str | None = None
 
 
 class Scheduler:
@@ -49,9 +50,9 @@ class Scheduler:
         self.lockfile = acquire_state_lock(self.config.state_dir)
         self.worker = asyncio.create_task(self._run(), name="scheduler")
 
-    async def acquire(self, mid: str):
+    async def acquire(self, mid: str, image_prompt: str | None = None):
         fut = asyncio.get_running_loop().create_future()
-        w = Waiter(mid, fut)
+        w = Waiter(mid, fut, image_prompt)
         async with self.cv:
             if self.closing:
                 raise Busy("router is shutting down")
@@ -85,6 +86,7 @@ class Scheduler:
             while True:
                 action = None
                 model = None
+                image_prompt = None
                 async with self.cv:
                     while action is None:
                         if self.closing:
@@ -129,6 +131,7 @@ class Scheduler:
                                     action = "stop"
                                     break
                                 model = self.config.models[first]
+                                image_prompt = self.queue[0].image_prompt
                                 self.current = first
                                 self.state = State.STARTING
                                 action = "start"
@@ -145,7 +148,7 @@ class Scheduler:
                         await self.cv.wait()
                 if action == "start":
                     try:
-                        await self._start(model)
+                        await self._start(model, image_prompt)
                         async with self.cv:
                             if self.proc and self.proc.returncode is not None:
                                 raise BackendError("backend exited during startup")
@@ -182,12 +185,12 @@ class Scheduler:
                 self.cv.notify_all()
             raise
 
-    async def _start(self, m: Model):
+    async def _start(self, m: Model, image_prompt=None):
         if m.backend == "qwen_image":
-            from backends.qwen_image.process import ImageProcess
+            from backends.qwen_image.runtime.process import ImageProcess
             log.info("loading native image model: %s", m.id)
             self.native = ImageProcess(m)
-            await asyncio.to_thread(self.native.load)
+            await asyncio.to_thread(self.native.load, image_prompt)
             return
         self.proc = await start_process(m)
         self.monitor = asyncio.create_task(self._watch(self.proc))

@@ -61,7 +61,7 @@ models:
 - id: Qwen-Image-2.1
   backend: qwen_image
   model_path: Qwen/Qwen-Image-2.1
-  cpu_offload: true
+  cpu_offload: auto
   endpoints:
   - images/generations
   - images/edits

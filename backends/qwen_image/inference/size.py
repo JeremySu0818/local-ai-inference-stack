@@ -1,4 +1,3 @@
-"""Choose a text-to-image aspect ratio locally, without changing the prompt."""
 import logging
 import re
 
@@ -14,6 +13,18 @@ class SizeSelector:
         self.tokenizer = None
 
     def choose(self, prompt):
+        import torch
+
+        threads = torch.get_num_threads()
+        if threads <= 8:
+            return self._choose(prompt)
+        torch.set_num_threads(8)
+        try:
+            return self._choose(prompt)
+        finally:
+            torch.set_num_threads(threads)
+
+    def _choose(self, prompt):
         import torch
         from transformers import AutoModelForImageTextToText, AutoTokenizer
 

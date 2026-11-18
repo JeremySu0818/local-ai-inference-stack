@@ -6,7 +6,7 @@ import sys
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from backends.llama_cpp.server import cached_file
-from backends.qwen_image.size import MODEL_ID, REVISION
+from backends.qwen_image.inference.size import MODEL_ID, REVISION
 from router.config import load_config
 
 
