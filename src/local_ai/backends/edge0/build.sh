@@ -15,6 +15,7 @@ STRATA_PYTHON="$EDGE0_DIR/edge0-strata/.venv/bin/python"
 if [[ -x "$INFER" && -x "$STRATA" && -x "$STRATA_PYTHON" ]]; then
   exit 0
 fi
+jobs="${MAX_JOBS:-$(nproc)}"
 for tool in curl tar sha256sum cmake ninja nvcc uv; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     printf 'Missing %s, required to build Edge0.\n' "$tool" >&2
@@ -53,7 +54,7 @@ if [[ ! -x "$STRATA" ]]; then
     -DCMAKE_CUDA_ARCHITECTURES="${STRATA_CUDA_ARCHITECTURES:-native}" \
     -DSTRATA_ENABLE_CUDA=ON \
     -DSTRATA_GGML_DIR="$ggml"
-  cmake --build "$EDGE0_DIR/edge0-strata/build" --target strata -j "${MAX_JOBS:-20}"
+  cmake --build "$EDGE0_DIR/edge0-strata/build" --target strata -j "$jobs"
 fi
 
 if [[ ! -x "$STRATA_PYTHON" ]]; then
@@ -68,6 +69,6 @@ if [[ ! -x "$INFER" ]]; then
   (
     cd "$EDGE0_DIR/edge0-infer"
     cmake --preset cpu
-    cmake --build --preset cpu --target edge0-infer -j "${MAX_JOBS:-20}"
+    cmake --build --preset cpu --target edge0-infer -j "$jobs"
   )
 fi

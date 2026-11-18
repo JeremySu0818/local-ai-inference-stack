@@ -3,6 +3,7 @@ set -euo pipefail
 
 LLAMA_DIR="$1"
 if [[ ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
+  jobs="${MAX_JOBS:-$(nproc)}"
   for tool in curl tar sha256sum cmake nvcc; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       printf 'Missing %s, required to build llama.cpp.\n' "$tool" >&2
@@ -21,5 +22,5 @@ if [[ ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
     trap - EXIT
   fi
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" -DGGML_CUDA=ON -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$LLAMA_DIR/build" --config Release --target llama-server -j "${MAX_JOBS:-20}"
+  cmake --build "$LLAMA_DIR/build" --config Release --target llama-server -j "$jobs"
 fi
