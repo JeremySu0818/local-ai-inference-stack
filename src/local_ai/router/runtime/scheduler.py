@@ -5,6 +5,7 @@ import enum
 import logging
 from dataclasses import dataclass
 import httpx
+from local_ai.backends import get_backend
 from .backend_process import start_process, stop_process, wait_until_ready
 from ..config import Config, Model
 from .errors import BackendError, Busy
@@ -26,7 +27,7 @@ class State(str, enum.Enum):
 class Waiter:
     model: str
     future: asyncio.Future
-    image_prompt: str | None = None
+    load_hint: str | None = None
 
 
 class Scheduler:
@@ -37,7 +38,7 @@ class Scheduler:
         self.state = State.STOPPED
         self.current = None
         self.proc = None
-        self.native = None
+        self.engine = None
         self.active = 0
         self.dirty = False
         self.closing = False
@@ -50,9 +51,9 @@ class Scheduler:
         self.lockfile = acquire_state_lock(self.config.state_dir)
         self.worker = asyncio.create_task(self._run(), name="scheduler")
 
-    async def acquire(self, mid: str, image_prompt: str | None = None):
+    async def acquire(self, mid: str, load_hint: str | None = None):
         fut = asyncio.get_running_loop().create_future()
-        w = Waiter(mid, fut, image_prompt)
+        w = Waiter(mid, fut, load_hint)
         async with self.cv:
             if self.closing:
                 raise Busy("router is shutting down")
@@ -86,7 +87,7 @@ class Scheduler:
             while True:
                 action = None
                 model = None
-                image_prompt = None
+                load_hint = None
                 async with self.cv:
                     while action is None:
                         if self.closing:
@@ -131,7 +132,7 @@ class Scheduler:
                                     action = "stop"
                                     break
                                 model = self.config.models[first]
-                                image_prompt = self.queue[0].image_prompt
+                                load_hint = self.queue[0].load_hint
                                 self.current = first
                                 self.state = State.STARTING
                                 action = "start"
@@ -148,7 +149,7 @@ class Scheduler:
                         await self.cv.wait()
                 if action == "start":
                     try:
-                        await self._start(model, image_prompt)
+                        await self._start(model, load_hint)
                         async with self.cv:
                             if self.proc and self.proc.returncode is not None:
                                 raise BackendError("backend exited during startup")
@@ -185,16 +186,16 @@ class Scheduler:
                 self.cv.notify_all()
             raise
 
-    async def _start(self, m: Model, image_prompt=None):
-        if m.backend == "qwen_image":
-            from local_ai.backends.qwen_image.runtime.process import ImageProcess
-            log.info("loading native image model: %s", m.id)
-            self.native = ImageProcess(m)
-            await asyncio.to_thread(self.native.load, image_prompt)
+    async def _start(self, m: Model, load_hint=None):
+        spec = get_backend(m.backend)
+        if spec.process is None:
+            self.proc = await start_process(m)
+            self.monitor = asyncio.create_task(self._watch(self.proc))
+            await wait_until_ready(self.proc, m, self.http)
             return
-        self.proc = await start_process(m)
-        self.monitor = asyncio.create_task(self._watch(self.proc))
-        await wait_until_ready(self.proc, m, self.http)
+        log.info("loading %s model: %s", spec.name, m.id)
+        self.engine = spec.process(m)
+        await asyncio.to_thread(self.engine.load, load_hint)
 
     async def _watch(self, proc):
         await proc.wait()
@@ -208,10 +209,10 @@ class Scheduler:
                 self.cv.notify_all()
 
     async def _stop(self):
-        if self.native is not None:
-            log.info("unloading native image model: %s", self.current)
-            await asyncio.to_thread(self.native.unload)
-            self.native = None
+        if self.engine is not None:
+            log.info("unloading %s model: %s", self.config.models[self.current].backend, self.current)
+            await asyncio.to_thread(self.engine.unload)
+            self.engine = None
         proc = self.proc
         if proc is None:
             return

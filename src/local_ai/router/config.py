@@ -7,6 +7,8 @@ from typing import Literal
 from urllib.parse import urlsplit
 import yaml
 
+from local_ai.backends import get_backend
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 ROUTER_CONFIG = PROJECT_ROOT / "config/router.yaml"
@@ -47,71 +49,29 @@ def load_config(path: str) -> Config:
     if not isinstance(raw, dict) or not isinstance(raw.get("models"), list):
         raise ValueError("configuration must contain a models list")
     models = {}
-    allowed = {
-        "chat/completions",
-        "completions",
-        "embeddings",
-        "images/generations",
-        "images/edits",
-        "audio/transcriptions",
-        "audio/translations",
-        "audio/speech",
-        "responses",
-    }
     for item in raw["models"]:
         mid = item["id"]
-        backend = item.get("backend", "http")
-        if backend not in ("http", "qwen_image", "llama_cpp"):
-            raise ValueError(f"{mid}: unsupported backend")
-        native = backend == "qwen_image"
-        if native and not item.get("model_path"):
-            raise ValueError(f"{mid}: model_path is required")
         if not isinstance(mid, str) or not mid or mid in models:
             raise ValueError("empty or duplicate model id")
-        llama = backend == "llama_cpp"
-        model_path = item.get("model_path") if native else None
+        try:
+            spec = get_backend(item.get("backend", "http"))
+        except ValueError as exc:
+            raise ValueError(f"{mid}: {exc}") from exc
+
+        configured = spec.configure(item) if spec.configure is not None else {}
+
+        cpu_offload = item.get("cpu_offload", False)
+        if not spec.native:
+            cpu_offload = bool(cpu_offload)
+        elif type(cpu_offload) is not bool and cpu_offload != "auto":
+            raise ValueError(f"{mid}: cpu_offload must be true, false, or auto")
+
+        model_path = item.get("model_path") if spec.local_model else None
         if model_path and (not item.get("model_revision") or model_path.startswith(("/", ".", "~"))):
             model_path = str(Path(model_path).expanduser().resolve())
-        base_url = "http://127.0.0.1:8000/v1" if llama else item.get("base_url", "")
-        u = urlsplit(base_url)
-        parallel = item.get("parallel", 1) if llama else 1
-        hf_repo = item.get("hf_repo", mid) if llama else None
-        if llama:
-            if not isinstance(hf_repo, str) or hf_repo.count("/") != 1 or not all(hf_repo.split("/")):
-                raise ValueError(f"{mid}: hf_repo must be a Hugging Face owner/repository ID")
-            if type(parallel) is not int or not 1 <= parallel <= 256:
-                raise ValueError(f"{mid}: parallel must be an integer from 1 to 256")
-            if not isinstance(item.get("gguf"), str) or not item["gguf"].endswith(".gguf"):
-                raise ValueError(f"{mid}: gguf filename is required")
-            if item.get("mmproj") is not None and (
-                not isinstance(item["mmproj"], str) or not item["mmproj"].endswith(".gguf")
-            ):
-                raise ValueError(f"{mid}: invalid mmproj filename")
-            if type(item.get("context_size")) is not int or item["context_size"] <= 0:
-                raise ValueError(f"{mid}: context_size must be a positive integer")
-            cmd = [sys.executable, "-m", "local_ai.backends.llama_cpp", "serve", str(Path(path).resolve()), mid]
-        else:
-            cmd = item.get("command", [])
-        if not native and (
-            not isinstance(cmd, list)
-            or not cmd
-            or not all(isinstance(x, str) and x for x in cmd)
-        ):
-            raise ValueError(f"{mid}: command must be a non-empty argument list")
-        if not native and (
-            u.scheme != "http"
-            or u.hostname not in ("127.0.0.1", "localhost", "::1")
-            or not u.port
-            or u.username
-            or u.password
-            or u.query
-            or u.fragment
-        ):
-            raise ValueError(f"{mid}: base_url must be an HTTP loopback URL with port")
+
         ep = tuple(item.get("endpoints", ["chat/completions"]))
-        if native and any(x not in ("images/generations", "images/edits") for x in ep):
-            raise ValueError(f"{mid}: native image backend only supports images endpoints")
-        if not ep or any(x not in allowed for x in ep):
+        if not ep or any(x not in spec.endpoints for x in ep):
             raise ValueError(f"{mid}: unsupported endpoint")
         health = item.get("health_path", "/health")
         if not health.startswith("/") or health.startswith("//") or "?" in health:
@@ -122,30 +82,30 @@ def load_config(path: str) -> Config:
         )
         if min(start, stop) <= 0:
             raise ValueError("timeouts must be positive")
-        cpu_offload = item.get("cpu_offload", False)
-        if not native:
-            cpu_offload = bool(cpu_offload)
-        elif type(cpu_offload) is not bool and cpu_offload != "auto":
-            raise ValueError(f"{mid}: cpu_offload must be true, false, or auto")
-        models[mid] = Model(
-            id=mid,
-            command=tuple(cmd),
-            base_url=base_url.rstrip("/"),
-            health_path=health,
-            endpoints=ep,
-            startup_timeout=start,
-            stop_timeout=stop,
-            cwd=None if llama else item.get("cwd"),
-            backend=backend,
-            model_path=model_path,
-            cpu_offload=cpu_offload,
-            model_revision=item.get("model_revision"),
-            hf_repo=hf_repo,
-            gguf=item.get("gguf"),
-            mmproj=item.get("mmproj"),
-            context_size=item.get("context_size"),
-            parallel=parallel,
-        )
+
+        fields = {
+            "id": mid,
+            "backend": spec.name,
+            "command": (),
+            "base_url": "",
+            "cwd": None,
+            "health_path": health,
+            "endpoints": ep,
+            "startup_timeout": start,
+            "stop_timeout": stop,
+            "model_path": model_path,
+            "model_revision": item.get("model_revision"),
+            "cpu_offload": cpu_offload,
+            **configured,
+        }
+        if spec.server:
+            fields["command"] = (
+                sys.executable, "-m", spec.server, "serve", str(Path(path).resolve()), mid,
+            )
+            fields["base_url"] = spec.base_url
+        if not spec.native:
+            loopback(fields["base_url"], mid)
+        models[mid] = Model(**fields)
     if not models:
         raise ValueError("at least one model required")
     runtime_config = ROUTER_CONFIG
@@ -167,3 +127,18 @@ def load_config(path: str) -> Config:
         else state_root / Path(runtime["state_dir"]).expanduser()
     )
     return Config(models, q, t, state_dir.resolve())
+
+
+def loopback(base_url: str, mid: str) -> None:
+    """The router only proxies to a server on this machine."""
+    u = urlsplit(base_url)
+    if (
+        u.scheme != "http"
+        or u.hostname not in ("127.0.0.1", "localhost", "::1")
+        or not u.port
+        or u.username
+        or u.password
+        or u.query
+        or u.fragment
+    ):
+        raise ValueError(f"{mid}: base_url must be an HTTP loopback URL with port")

@@ -6,6 +6,7 @@ import threading
 
 from fastapi.responses import StreamingResponse
 
+from local_ai.backends import get_backend
 from ..runtime.errors import BackendError, Busy
 from .responses import error
 
@@ -51,7 +52,7 @@ class InferenceResponse(StreamingResponse):
             await asyncio.gather(delivery, self.watcher, return_exceptions=True)
 
 
-async def stream_inference(request, model, endpoint, body, native_input):
+async def stream_inference(request, model, endpoint, body, parsed):
     mid = model.id
     headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
     url = model.base_url + "/" + endpoint
@@ -62,7 +63,7 @@ async def stream_inference(request, model, endpoint, body, native_input):
     abandoned = asyncio.Event()
     consumed = asyncio.Event()
     admitted = asyncio.Event()
-    image_cancel = threading.Event()
+    engine_cancel = threading.Event()
     producing = True
     ready.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
 
@@ -83,14 +84,13 @@ async def stream_inference(request, model, endpoint, body, native_input):
         lease = None
         failed = False
         try:
-            image_prompt = None
-            if native_input is not None and native_input[0].width is None:
-                image_prompt = native_input[0].prompt
-            lease = await request.app.state.scheduler.acquire(mid, image_prompt)
+            spec = get_backend(model.backend)
+            load_hint = spec.load_hint(parsed) if spec.load_hint is not None else None
+            lease = await request.app.state.scheduler.acquire(mid, load_hint)
             admitted.set()
-            if native_input is not None:
+            if parsed is not None:
                 result = await asyncio.to_thread(
-                    request.app.state.scheduler.native.generate, *native_input, image_cancel
+                    request.app.state.scheduler.engine.generate, *parsed, engine_cancel
                 )
                 if abandoned.is_set():
                     return
@@ -149,8 +149,8 @@ async def stream_inference(request, model, endpoint, body, native_input):
         if abandoned.is_set():
             return
         abandoned.set()
-        image_cancel.set()
-        if producing and (native_input is None or not admitted.is_set()):
+        engine_cancel.set()
+        if producing and (parsed is None or not admitted.is_set()):
             task.cancel()
 
     async def watch_disconnect():

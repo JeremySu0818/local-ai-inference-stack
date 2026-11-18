@@ -1,6 +1,7 @@
 import sys
 
-from .server import SOURCE_DIR, serve
+from . import SOURCE_DIR
+from .server import serve
 
 
 if __name__ == "__main__":

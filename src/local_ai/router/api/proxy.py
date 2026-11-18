@@ -3,6 +3,7 @@ import json
 
 from fastapi import Request
 
+from local_ai.backends import get_backend
 from .responses import error
 from .streaming import stream_inference
 
@@ -61,11 +62,11 @@ async def proxy(endpoint: str, request: Request):
     m = config.models[mid]
     if endpoint not in m.endpoints:
         return error("Endpoint not enabled for this model", 404)
-    native_input = None
-    if m.backend == "qwen_image":
-        from local_ai.backends.qwen_image.api.request import parse_request
+    spec = get_backend(m.backend)
+    parsed = None
+    if spec.parse is not None:
         try:
-            native_input = await parse_request(endpoint, bytes(body), ctype)
+            parsed = await spec.parse(endpoint, bytes(body), ctype)
         except (ValueError, TypeError) as exc:
             return error(str(exc), 400)
-    return await stream_inference(request, m, endpoint, body, native_input)
+    return await stream_inference(request, m, endpoint, body, parsed)

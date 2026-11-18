@@ -1,20 +1,10 @@
 """Launch a configured llama.cpp model from the shared Hugging Face cache."""
 import os
-from pathlib import Path
-
-from huggingface_hub import try_to_load_from_cache
 
 from local_ai.router.config import load_config
 
-VERSION = "v1.0.0"
-CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-SOURCE_DIR = CACHE_ROOT / "local-ai-inference-stack" / f"llama.cpp-{VERSION}"
-SERVER = SOURCE_DIR / "build/bin/llama-server"
-
-
-def cached_file(repo, filename):
-    path = try_to_load_from_cache(repo, filename)
-    return path if isinstance(path, str) and Path(path).is_file() else None
+from ..base import cached_file
+from . import SERVER
 
 
 def serve(config_path, model_id):
