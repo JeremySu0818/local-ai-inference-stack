@@ -21,5 +21,5 @@ if [[ ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
     trap - EXIT
   fi
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" -DGGML_CUDA=ON -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$LLAMA_DIR/build" --config Release --target llama-server -j "${MAX_JOBS:-16}"
+  cmake --build "$LLAMA_DIR/build" --config Release --target llama-server -j "${MAX_JOBS:-20}"
 fi

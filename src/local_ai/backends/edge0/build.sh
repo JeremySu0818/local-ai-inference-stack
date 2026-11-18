@@ -53,7 +53,7 @@ if [[ ! -x "$STRATA" ]]; then
     -DCMAKE_CUDA_ARCHITECTURES="${STRATA_CUDA_ARCHITECTURES:-native}" \
     -DSTRATA_ENABLE_CUDA=ON \
     -DSTRATA_GGML_DIR="$ggml"
-  cmake --build "$EDGE0_DIR/edge0-strata/build" --target strata -j "${MAX_JOBS:-16}"
+  cmake --build "$EDGE0_DIR/edge0-strata/build" --target strata -j "${MAX_JOBS:-20}"
 fi
 
 if [[ ! -x "$STRATA_PYTHON" ]]; then
@@ -68,6 +68,6 @@ if [[ ! -x "$INFER" ]]; then
   (
     cd "$EDGE0_DIR/edge0-infer"
     cmake --preset cpu
-    cmake --build --preset cpu --target edge0-infer -j "${MAX_JOBS:-16}"
+    cmake --build --preset cpu --target edge0-infer -j "${MAX_JOBS:-20}"
   )
 fi
