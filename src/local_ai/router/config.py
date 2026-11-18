@@ -61,9 +61,6 @@ def load_config(path: str) -> Config:
         except ValueError as exc:
             raise ValueError(f"{mid}: {exc}") from exc
 
-        # Everything that belongs to this backend, before anything generic: a
-        # missing engine setting is the reason an entry is wrong, not the endpoint
-        # list that happens to sit next to it.
         configured = spec.configure(item) if spec.configure is not None else {}
 
         cpu_offload = item.get("cpu_offload", False)
