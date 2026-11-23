@@ -31,8 +31,10 @@ class Model:
     hf_repo: str | None = None
     gguf: str | None = None
     mmproj: str | None = None
+    mmproj_repo: str | None = None
     context_size: int | None = None
     parallel: int = 1
+    ubatch_size: int | None = None
     device: str | None = None
     model_options: tuple[str, ...] = ()
     engine_args: tuple[str, ...] = ()

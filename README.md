@@ -10,7 +10,7 @@
 
 ## 快速開始
 
-安裝需要 NVIDIA 驅動、CUDA Toolkit（含 `nvcc`）、C/C++ 編譯工具和 `curl`；`uv`、CMake 和 Ninja 會由 `setup.sh` 自動安裝。首次安裝會下載依賴和已設定的模型，請預留磁碟空間（Edge0 145B 的權重約 107 GB）。
+安裝需要 NVIDIA 驅動、CUDA Toolkit（含 `nvcc`）、C/C++ 編譯工具和 `curl`；`uv`、CMake 和 Ninja 會由 `setup.sh` 自動安裝。首次安裝會下載依賴和已設定的模型，請預留磁碟空間（Edge0 145B 的權重約 107 GB，Inkling 2 Mini 約 18 GB）。
 
 在專案目錄執行安裝，完成後啟動服務。
 
@@ -66,6 +66,28 @@ curl http://127.0.0.1:9000/v1/embeddings \
 ## 推論後端
 
 文字與多模態模型使用 llama.cpp 後端載入 GGUF 權重，並透過 OpenAI 相容 API 提供推論。可用模型和各模型支援的 API 請見 [config/models.yaml](config/models.yaml)。
+
+### Inkling 2 Mini
+
+`Inkling-2-Mini` 使用 `Jobaar/Inkling-2-Mini-NVFP4-GGUF` 的 NVFP4（17.6 GB）加上 `ggml-org/Inkling-2-Mini-GGUF` 的 BF16 視覺投影檔（642 MB），支援對話、文字補全、Responses、圖片輸入和工具呼叫。取樣建議沿用官方的 `temperature: 1.0`、`top_p: 1.0`，思考深度用 `reasoning_effort` 調整（`none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`）。
+
+這個檔是把官方 checkpoint 的原生 NVFP4 權重原封不動重打包成 GGUF，不重新量化，所以 Blackwell 可以直接用 FP4 的 tensor core 算專家層（W4A4），沒有經 F32 中轉的精度損失。llama.cpp 自己的轉換程式會把 NVFP4 反量化回 F32，因此官方沒有 NVFP4 的 GGUF，這個檔是非官方的重打包。檔案多出來的是 40 個逐專家的 `.scale` 張量，需要 [#32704](https://github.com/ggml-org/llama.cpp/pull/32704)（b12635 起）之後的版本才讀得對，舊版會載入但輸出亂碼，後端釘在 `b12653`。投影檔來自另一個 repo，所以設定裡要用 `mmproj_repo` 指過去。
+
+長上下文時，吃掉顯存的主要不是 KV 快取，而是注意力遮罩。這個模型 24 層中只有 4 層做完整注意力（其餘是 1024 的滑動窗口），加上循環重跑的槽位共 6 層；llama-server 會依「上下文 × ubatch × 注意力頭數」為這些層建立逐注意力頭的偏移遮罩，約 200 字節，所以預設的 `--ubatch-size 512` 在 262k 上下文下就要 25 GB 以上，直接超出顯存。llama.cpp 後端因此支援以 `ubatch_size` 為單一模型設定物理批次大小，設定值會直接傳給 `--ubatch-size`。依此估算（NVFP4 權重加 BF16 投影檔、`parallel: 4`、32 GB 顯存）：
+
+| `context_size` | `ubatch_size` | 權重 + KV + 遮罩 | 狀態 |
+| -------------: | ------------: | ---------------: | --- |
+| 262144         | 512（預設）   |          約 46 GB | 載入失敗 |
+| 262144         | 128           |          約 27 GB | 可用，即預設設定 |
+| 262144         | 64            |          約 24 GB | 較有餘裕 |
+| 524288         | 32            |          約 27 GB | 可用，但預填會變慢 |
+| 1048576        | 8             |          約 33 GB | 超出單卡顯存 |
+
+NVFP4 和 IQ4_NL 的檔案大小幾乎一樣（17.6 GB），省下的不是空間而是精度和速度，因此單張 RTX PRO 4500 上可用的上下文仍是 262k，頂多 524k，用不到模型原生的 1M。精確數字以 `llama-server` 啟動時 log 中的 `KV buffer size` 和 `compute buffer` 為準，改設定後可先看 log 再啟動服務。
+
+權重和專家都要留在 GPU 上（後端固定 `--n-gpu-layers all`）。把專家搬到 CPU 的 `--n-cpu-moe` 和 `--moe-cache-mib` 會觸發輸出全變成問號的已知問題，不要在 `engine_args` 中加上。
+
+後端固定使用 `--kv-unified`，所以 `parallel` 個併發槽位共用同一份上下文：設 262144 表示同時進行的請求加起來最多 262k token，要讓單一會話用滿上下文就把 `parallel` 設成 1。
 
 ### 文字轉向量
 

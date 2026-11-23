@@ -58,6 +58,20 @@ models:
   - responses
   startup_timeout_seconds: 900
   mmproj: mmproj-nsfwvision_v3-f16.gguf
+- id: Inkling-2-Mini
+  backend: llama_cpp
+  hf_repo: Jobaar/Inkling-2-Mini-NVFP4-GGUF
+  gguf: Inkling-2-Mini-NVFP4.gguf
+  mmproj: mmproj-Inkling-2-Mini-BF16.gguf
+  mmproj_repo: ggml-org/Inkling-2-Mini-GGUF
+  context_size: 262144
+  parallel: 4
+  ubatch_size: 128
+  endpoints:
+  - chat/completions
+  - completions
+  - responses
+  startup_timeout_seconds: 900
 - id: Qwen-Image-2.1
   backend: qwen_image
   model_path: Qwen/Qwen-Image-2.1
@@ -87,6 +101,8 @@ models:
   engine_args:
   - --vram-reserve-mib
   - "2048"
+  - --batch
+  - "2"
   endpoints:
   - chat/completions
   - responses

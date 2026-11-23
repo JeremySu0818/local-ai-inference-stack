@@ -15,8 +15,8 @@ if [[ ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
     archive=$(mktemp)
     trap 'rm -f "$archive"' EXIT
     curl -fL --retry 5 --retry-delay 2 --connect-timeout 15 \
-      https://codeload.github.com/ggml-org/llama.cpp/tar.gz/refs/tags/v1.0.0 -o "$archive"
-    printf '%s  %s\n' '3f5f750e36326aea4d65c7623e7d597a33e395d65f4d76e5e0532171f252532b' "$archive" | sha256sum -c -
+      https://codeload.github.com/ggml-org/llama.cpp/tar.gz/refs/tags/b12653 -o "$archive"
+    printf '%s  %s\n' 'b6c4e39afd6fed0f4ed581ebb9905fcfcd17a91405213cd88802915cd045e22d' "$archive" | sha256sum -c -
     tar -xzf "$archive" --strip-components=1 -C "$LLAMA_DIR"
     rm -f "$archive"
     trap - EXIT

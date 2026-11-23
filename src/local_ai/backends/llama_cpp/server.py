@@ -15,11 +15,11 @@ def server_args(model) -> list[str]:
     With unified KV, one slot can use the full configured context.
     """
     args = [str(server_path())]
-    for flag, filename in (("-m", model.gguf), ("--mmproj", model.mmproj)):
+    for flag, filename, repo in (("-m", model.gguf, model.hf_repo), ("--mmproj", model.mmproj, model.mmproj_repo)):
         if filename is not None:
-            path = cached_file(model.hf_repo, filename)
+            path = cached_file(repo, filename)
             if path is None:
-                raise SystemExit(f"Missing cached file {model.hf_repo}/{filename}. Run ./setup.sh")
+                raise SystemExit(f"Missing cached file {repo}/{filename}. Run ./setup.sh")
             args.extend((flag, path))
 
     args.extend((
@@ -29,6 +29,8 @@ def server_args(model) -> list[str]:
         "--n-gpu-layers", "all", "--fit", "off", "--flash-attn", "on",
         "--cache-type-k", "q8_0", "--cache-type-v", "q8_0", "--jinja",
     ))
+    if model.ubatch_size is not None:
+        args.extend(("--ubatch-size", str(model.ubatch_size)))
     if "embeddings" in model.endpoints:
         context = str(model.context_size)
         args.extend(("--embeddings", "--batch-size", context, "--ubatch-size", context))
