@@ -27,8 +27,6 @@ uv pip install -e "$ROOT_DIR"
 PYTHON="$VENV_DIR/bin/python"
 CONFIG_PATH="${AI_ROUTER_CONFIG:-$ROOT_DIR/config/models.yaml}"
 
-# The backends this run actually uses, taken from the router's own config so
-# nothing here repeats the registry's idea of what an entry declares.
 BACKENDS="$(cd "$ROOT_DIR" && "$PYTHON" -c '
 import sys
 from local_ai.router.config import load_config
@@ -49,9 +47,6 @@ if [[ "$need_edge0" == 1 ]]; then
   EDGE0_DIR=$("$PYTHON" -m local_ai.backends.edge0 source-dir)
 fi
 
-# A backend needs building only when it is configured and not already present.
-# These are the same markers each build script checks, so a backend is never
-# built twice and an already-built one never asks for a tool it does not need.
 build_llama=0
 if [[ "$need_llama" == 1 && ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then build_llama=1; fi
 build_edge0=0
@@ -59,9 +54,6 @@ if [[ "$need_edge0" == 1 && ! ( -x "$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-i
     && -x "$EDGE0_DIR/edge0-strata/build/strata" \
     && -x "$EDGE0_DIR/edge0-strata/.venv/bin/python" ) ]]; then build_edge0=1; fi
 
-# Pay for build tools only when a backend that will compile actually needs them.
-# cmake and nvcc serve both; ninja belongs to Edge0's generator, and to llama.cpp
-# only when the user told cmake to use it.
 need_cmake=0
 need_ninja=0
 need_nvcc=0
@@ -69,7 +61,7 @@ if [[ "$build_llama" == 1 || "$build_edge0" == 1 ]]; then need_cmake=1; need_nvc
 if [[ "$build_edge0" == 1 ]]; then need_ninja=1; fi
 if [[ "$build_llama" == 1 && "${CMAKE_GENERATOR:-}" == *[Nn]inja* ]]; then need_ninja=1; fi
 
-install_build_tool() {  # $1 = cmake or ninja, pinned by requirements/build.txt
+install_build_tool() {
   if [[ ! -f "$TOOLS_DIR/bin/python" ]]; then
     uv venv --python 3.12 --allow-existing "$TOOLS_DIR"
   fi

@@ -115,12 +115,6 @@ async def stream_inference(request, model, endpoint, body, parsed):
                     async for chunk in resp.aiter_bytes():
                         await put(chunk)
                     return
-                # Rewriting needs the whole body, and the length the engine
-                # promised no longer describes it; content-length is already
-                # dropped from everything the router forwards.  A batch of
-                # several hundred vectors is megabytes of JSON, so parse it
-                # off the loop: holding the event loop would stall health
-                # checks and disconnect detection for every other request.
                 payload = bytearray()
                 async for chunk in resp.aiter_bytes():
                     payload.extend(chunk)

@@ -12,10 +12,8 @@ from ..base import Backend, download, repository
 
 VERSION = "b12653"
 
-# llama.cpp's default logical batch size, which the physical batch is capped at.
 DEFAULT_BATCH_SIZE = 2048
 
-# The flags server.py sets itself and their aliases in llama.cpp's common/arg.cpp.
 RESERVED_ARGS = (
     "-m", "--model", "-mm", "--mmproj", "-a", "--alias", "--host", "--port",
     "-c", "--ctx-size", "-np", "--parallel",
@@ -61,8 +59,6 @@ def configure(item: dict) -> dict:
     mmproj = item.get("mmproj")
     if mmproj is not None and (not isinstance(mmproj, str) or not mmproj.endswith(".gguf")):
         raise ValueError(f"{mid}: invalid mmproj filename")
-    # Repositories that ship only the weights point elsewhere for the projector, and the
-    # cache keys every file by its repository, so llama-server needs to know which one.
     mmproj_repo = item.get("mmproj_repo")
     if mmproj_repo is not None:
         if mmproj is None:
@@ -73,9 +69,6 @@ def configure(item: dict) -> dict:
     parallel = item.get("parallel", 1)
     if type(parallel) is not int or not 1 <= parallel <= 256:
         raise ValueError(f"{mid}: parallel must be an integer from 1 to 256")
-    # llama-server sizes part of its scratch buffer as context x ubatch, so the engine's
-    # 512-token ubatch needs gigabytes at long context. It also caps the physical batch
-    # at the logical one, which it leaves at its own default.
     ubatch = item.get("ubatch_size")
     if ubatch is not None and (type(ubatch) is not int or not 1 <= ubatch <= DEFAULT_BATCH_SIZE):
         raise ValueError(
@@ -84,8 +77,6 @@ def configure(item: dict) -> dict:
         )
     if ubatch is not None and ubatch > item["context_size"]:
         raise ValueError(f"{mid}: ubatch_size cannot exceed context_size")
-    # server.py raises the ubatch to the whole context for embeddings, whose bidirectional
-    # attention fails outright on a prompt longer than one ubatch.
     if ubatch is not None and "embeddings" in item.get("endpoints", []):
         raise ValueError(f"{mid}: ubatch_size is fixed to context_size for embeddings")
     dimensions = item.get("embedding_dimensions", [])
