@@ -42,6 +42,8 @@ class InferenceResponse(StreamingResponse):
             )
             if delivery in done:
                 await delivery
+            else:
+                scope["state"]["outcome"] = "client_disconnected"
         except OSError:
             scope["state"]["outcome"] = "client_disconnected"
         finally:
@@ -177,8 +179,6 @@ async def stream_inference(request, model, endpoint, body, parsed):
         while True:
             message = await request.receive()
             if message["type"] == "http.disconnect":
-                request.state.outcome = "client_disconnected"
-                abandon()
                 return
 
     watcher = asyncio.create_task(watch_disconnect())
@@ -188,6 +188,7 @@ async def stream_inference(request, model, endpoint, body, parsed):
             (ready, watcher), return_when=asyncio.FIRST_COMPLETED
         )
         if watcher in done:
+            request.state.outcome = "client_disconnected"
             abandon()
             return error("Client disconnected", 499)
         status, rheaders = await ready

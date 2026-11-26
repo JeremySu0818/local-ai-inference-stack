@@ -14,6 +14,18 @@ from .api.proxy import proxy
 from .api.responses import error
 from .runtime.scheduler import Scheduler
 
+
+class AccessConsoleFormatter(logging.Formatter):
+    def format(self, record):
+        line = super().format(record)
+        if record.levelno >= logging.ERROR:
+            color = "\x1b[31m"
+        elif record.levelno >= logging.WARNING:
+            color = "\x1b[33m"
+        else:
+            color = "\x1b[32m"
+        return f"{color}{line}\x1b[0m"
+
 def app_factory():
     config = load_config(os.environ.get("AI_ROUTER_CONFIG", "config/models.yaml"))
 
@@ -33,9 +45,11 @@ def app_factory():
             access_path.with_name(access_path.name + suffix).unlink(missing_ok=True)
         handler = logging.FileHandler(access_path, mode="w", encoding="utf-8")
         console = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s %(message)s")
+        format_string = "%(asctime)s %(message)s"
+        handler.setFormatter(logging.Formatter(format_string))
+        formatter = AccessConsoleFormatter if console.stream.isatty() and "NO_COLOR" not in os.environ else logging.Formatter
+        console.setFormatter(formatter(format_string))
         for output in (handler, console):
-            output.setFormatter(formatter)
             access_log.addHandler(output)
         try:
             yield
@@ -98,7 +112,17 @@ def app_factory():
                 raise
             finally:
                 client = scope.get("client")
-                access_log.info(
+                outcome = request_state.get("outcome") or (
+                    "server_error" if status >= 500 else
+                    "client_error" if status >= 400 else "completed"
+                )
+                level = logging.INFO
+                if outcome in ("backend_error", "router_error", "server_error"):
+                    level = logging.ERROR
+                elif outcome != "completed":
+                    level = logging.WARNING
+                access_log.log(
+                    level,
                     "source=%r method=%r path=%r status=%d duration_ms=%.1f request_id=%s model=%r outcome=%s",
                     client[0] if client else "unknown",
                     scope["method"],
@@ -107,10 +131,7 @@ def app_factory():
                     (time.perf_counter() - started) * 1000,
                     request_id,
                     request_state.get("model"),
-                    request_state.get("outcome") or (
-                        "server_error" if status >= 500 else
-                        "client_error" if status >= 400 else "completed"
-                    ),
+                    outcome,
                 )
 
     app = RouterApp(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
