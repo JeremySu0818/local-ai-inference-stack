@@ -2,6 +2,7 @@
 import json
 
 from fastapi import Request
+from starlette.requests import ClientDisconnect
 
 from local_ai.backends import get_backend
 from .responses import error
@@ -14,7 +15,8 @@ async def proxy(endpoint: str, request: Request):
     try:
         async for chunk in request.stream():
             body.extend(chunk)
-    except Exception:
+    except ClientDisconnect:
+        request.state.outcome = "client_disconnected"
         return error("Request body interrupted", 400)
     ctype = request.headers.get("content-type", "")
     try:
@@ -62,6 +64,7 @@ async def proxy(endpoint: str, request: Request):
     m = config.models[mid]
     if endpoint not in m.endpoints:
         return error("Endpoint not enabled for this model", 404)
+    request.state.model = m.id
     spec = get_backend(m.backend)
     parsed = None
     if spec.parse is not None:

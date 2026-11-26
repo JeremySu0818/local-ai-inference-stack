@@ -19,6 +19,7 @@ export AI_ROUTER_CONFIG="$CONFIG_PATH"
 
 exec "$UVICORN" local_ai.router.app:app_factory \
   --factory \
+  --no-access-log \
   --host "${AI_ROUTER_HOST:-0.0.0.0}" \
   --port "${AI_ROUTER_PORT:-9000}" \
   --workers 1 \

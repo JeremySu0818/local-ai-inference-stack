@@ -43,7 +43,7 @@ class InferenceResponse(StreamingResponse):
             if delivery in done:
                 await delivery
         except OSError:
-            pass
+            scope["state"]["outcome"] = "client_disconnected"
         finally:
             if not delivery.done() or delivery.cancelled() or delivery.exception():
                 self.abandon()
@@ -103,6 +103,8 @@ async def stream_inference(request, model, endpoint, body, parsed):
             async with request.app.state.upstream.stream(
                 "POST", url, content=bytes(body), headers=headers
             ) as resp:
+                if resp.status_code >= 500:
+                    request.state.outcome = "backend_error"
                 response_headers = {
                     k: v
                     for k, v in resp.headers.items()
@@ -129,7 +131,13 @@ async def stream_inference(request, model, endpoint, body, parsed):
             raise
         except Exception as e:
             failed = lease is not None
-            log.warning("upstream %s failed: %s", mid, e)
+            if not isinstance(e, Busy):
+                if not abandoned.is_set():
+                    request.state.outcome = "backend_error"
+                log.warning(
+                    "upstream failed model=%s request_id=%s error_type=%s",
+                    mid, request.state.request_id, type(e).__name__,
+                )
             if not ready.done():
                 ready.set_exception(e)
         finally:
@@ -169,6 +177,7 @@ async def stream_inference(request, model, endpoint, body, parsed):
         while True:
             message = await request.receive()
             if message["type"] == "http.disconnect":
+                request.state.outcome = "client_disconnected"
                 abandon()
                 return
 
@@ -187,6 +196,7 @@ async def stream_inference(request, model, endpoint, body, parsed):
         abandon()
         raise
     except Busy as e:
+        request.state.outcome = "queue_full"
         return error(e, 503, "server_error")
     except BackendError as e:
         return error(e, 503, "server_error")

@@ -50,7 +50,8 @@ fi
 build_llama=0
 if [[ "$need_llama" == 1 && ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then build_llama=1; fi
 build_edge0=0
-if [[ "$need_edge0" == 1 && ! ( -x "$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-infer" \
+if [[ "$need_edge0" == 1 && ! ( -f "$EDGE0_DIR/.router-access-log-v1" \
+    && -x "$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-infer" \
     && -x "$EDGE0_DIR/edge0-strata/build/strata" \
     && -x "$EDGE0_DIR/edge0-strata/.venv/bin/python" ) ]]; then build_edge0=1; fi
 

@@ -12,7 +12,8 @@ EDGE0_DIR="$1"
 INFER="$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-infer"
 STRATA="$EDGE0_DIR/edge0-strata/build/strata"
 STRATA_PYTHON="$EDGE0_DIR/edge0-strata/.venv/bin/python"
-if [[ -x "$INFER" && -x "$STRATA" && -x "$STRATA_PYTHON" ]]; then
+ACCESS_LOG_PATCH="$EDGE0_DIR/.router-access-log-v1"
+if [[ -f "$ACCESS_LOG_PATCH" && -x "$INFER" && -x "$STRATA" && -x "$STRATA_PYTHON" ]]; then
   exit 0
 fi
 jobs="${MAX_JOBS:-$(nproc)}"
@@ -64,11 +65,20 @@ if [[ ! -x "$STRATA_PYTHON" ]]; then
     -r "$EDGE0_DIR/edge0-strata/requirements.txt"
 fi
 
-if [[ ! -x "$INFER" ]]; then
+if [[ ! -f "$ACCESS_LOG_PATCH" || ! -x "$INFER" ]]; then
+  sed -i \
+    -e 's/history.add(record);/(void)record;/' \
+    -e '/^[[:space:]]*log(record_json(record).dump());$/d' \
+    "$EDGE0_DIR/edge0-infer/tools/cli/serve_delegate_proxy.cpp"
+  sed -i \
+    -e 's/history.add(record); state->recorded = true;/state->recorded = true;/' \
+    -e '/^[[:space:]]*log(portal::record_json(record).dump());$/d' \
+    "$EDGE0_DIR/edge0-infer/tools/cli/serve.cpp"
   printf 'Building edge0-infer...\n'
   (
     cd "$EDGE0_DIR/edge0-infer"
     cmake --preset cpu
     cmake --build --preset cpu --target edge0-infer -j "$jobs"
   )
+  touch "$ACCESS_LOG_PATCH"
 fi
