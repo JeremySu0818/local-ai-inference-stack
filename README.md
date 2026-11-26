@@ -35,6 +35,8 @@ uv pip compile --torch-backend=cu132 --python-version 3.12 --python-platform x86
 
 Router 會將 API 存取紀錄同時印到終端機並寫入狀態目錄的 `access.log`（預設 `state/access.log`），包含時間、來源 IP、方法、路徑、狀態碼和耗時。每次啟動會清空前一次的存取紀錄。
 
+透過 `./start.sh` 啟動時，終端機輸出也會寫入 `state/server.log`（使用自訂狀態目錄時會寫到該目錄），包含連線紀錄和後端診斷訊息。每次啟動清空，保留本次執行最近 100 萬行。
+
 以下指令可查看服務狀態及可用的模型 ID。
 
 ```bash

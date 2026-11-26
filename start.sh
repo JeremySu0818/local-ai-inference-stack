@@ -17,6 +17,11 @@ fi
 cd "$ROOT_DIR"
 export AI_ROUTER_CONFIG="$CONFIG_PATH"
 
+if [[ -t 2 ]]; then
+  export AI_ROUTER_CONSOLE_TTY=1
+fi
+exec > >("$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/scripts/server_log.py") 2>&1
+
 exec "$UVICORN" local_ai.router.app:app_factory \
   --factory \
   --no-access-log \

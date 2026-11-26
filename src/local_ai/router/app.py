@@ -47,7 +47,7 @@ def app_factory():
         console = logging.StreamHandler()
         format_string = "%(asctime)s %(message)s"
         handler.setFormatter(logging.Formatter(format_string))
-        formatter = AccessConsoleFormatter if console.stream.isatty() and "NO_COLOR" not in os.environ else logging.Formatter
+        formatter = AccessConsoleFormatter if (console.stream.isatty() or os.environ.get("AI_ROUTER_CONSOLE_TTY") == "1") and "NO_COLOR" not in os.environ else logging.Formatter
         console.setFormatter(formatter(format_string))
         for output in (handler, console):
             access_log.addHandler(output)
