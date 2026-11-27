@@ -12,8 +12,11 @@ EDGE0_DIR="$1"
 INFER="$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-infer"
 STRATA="$EDGE0_DIR/edge0-strata/build/strata"
 STRATA_PYTHON="$EDGE0_DIR/edge0-strata/.venv/bin/python"
+VISION="$EDGE0_DIR/edge0-strata/build-vision/bin/strata-vision"
 ACCESS_LOG_PATCH="$EDGE0_DIR/.router-access-log-v1"
-if [[ -f "$ACCESS_LOG_PATCH" && -x "$INFER" && -x "$STRATA" && -x "$STRATA_PYTHON" ]]; then
+VISION_PATCH="$EDGE0_DIR/.router-vision-v1"
+if [[ -f "$ACCESS_LOG_PATCH" && -f "$VISION_PATCH" && -x "$INFER" && -x "$STRATA" \
+    && -x "$STRATA_PYTHON" && -x "$VISION" ]]; then
   exit 0
 fi
 jobs="${MAX_JOBS:-$(nproc)}"
@@ -63,6 +66,45 @@ if [[ ! -x "$STRATA_PYTHON" ]]; then
   uv venv --python 3.12 --allow-existing "$EDGE0_DIR/edge0-strata/.venv"
   uv pip install --python "$EDGE0_DIR/edge0-strata/.venv/bin/python" \
     -r "$EDGE0_DIR/edge0-strata/requirements.txt"
+fi
+
+if [[ ! -x "$VISION" || ! -f "$VISION_PATCH" ]]; then
+  if [[ ! -x "$VISION" ]]; then
+    printf 'Building strata-vision...\n'
+    cmake -S "$EDGE0_DIR/edge0-strata/tools/vision" -B "$EDGE0_DIR/edge0-strata/build-vision" -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DLLAMA_DIR="$ggml" \
+      -DSTRATA_VISION_CUDA=OFF \
+      -DSTRATA_PORTABLE=OFF
+    cmake --build "$EDGE0_DIR/edge0-strata/build-vision" --target strata-vision -j "$jobs"
+  fi
+  printf 'Enabling images on the Edge0 launch templates...\n'
+  "$STRATA_PYTHON" - "$EDGE0_DIR/edge0-strata" <<'PY'
+import json
+import os
+import sys
+
+root = sys.argv[1]
+vision = {
+    "exe": "${STRATA_DIR}/build-vision/bin/strata-vision",
+    "mmproj": "${MODEL_DIR}/mmproj-BF16.gguf",
+    "model": "${MODEL_DIR}/model-skeleton.gguf",
+    "gpu": False,
+    "max_tokens": 1024,
+    "threads": max(1, min((os.cpu_count() or 8) // 2, 16)),
+}
+for name in ("edge0-145b.json", "edge0-120b.json"):
+    path = os.path.join(root, "edge0", "models", name)
+    with open(path, encoding="utf-8") as handle:
+        config = json.load(handle)
+    if "--vision" not in config["args"]:
+        config["args"].append("--vision")
+    config["vision"] = vision
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, indent=2)
+        handle.write("\n")
+PY
+  touch "$VISION_PATCH"
 fi
 
 if [[ ! -f "$ACCESS_LOG_PATCH" || ! -x "$INFER" ]]; then

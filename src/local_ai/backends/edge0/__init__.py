@@ -2,7 +2,7 @@
 
 edge0-infer is a portal: it starts edge0-strata, waits for the weights, and serves
 the OpenAI endpoints on a loopback port, so the router treats it like any other
-server backend.  Only this package knows the two binaries, the pack layout, and
+server backend.  Only this package knows the binaries, the pack layout, and
 the engine options the portal passes through.
 """
 from __future__ import annotations
@@ -53,12 +53,19 @@ def strata_python() -> Path:
     """The interpreter the portal uses to start strata."""
     return strata_dir() / ".venv/bin/python"
 
+
+def vision() -> Path:
+    """The image encoder strata starts for picture requests."""
+    return strata_dir() / "build-vision/bin/strata-vision"
+
+
+MMPROJ = "mmproj-BF16.gguf"
 DEFAULT_DEVICE = "cuda:0"
 READY_TIMEOUT = 1800.0
 RESERVED_ARGS = (
     "--pack", "--native", "--native-dense-gguf", "--ple-gguf", "--ple-io",
     "--expert-profile", "--expert-cache", "--prefill", "--spec", "--spec-min-p",
-    "--mtp", "--max-context", "--kv",
+    "--mtp", "--max-context", "--kv", "--vision",
 )
 
 
@@ -129,6 +136,12 @@ def check(model, path: str | None = None) -> None:
     if not ok:
         detail = (report.stderr or report.stdout).strip()
         raise SystemExit(f"Edge0 model {path} is not complete:\n{detail}")
+    if os.path.isfile(os.path.join(path, MMPROJ)):
+        return
+    message = f"Edge0 model {path} has no {MMPROJ}, so it cannot read images."
+    if model.hf_repo:
+        message += f"\nRun .venv/bin/hf download {model.hf_repo} and retry ./setup.sh."
+    raise SystemExit(message)
 
 
 def prepare(model) -> None:

@@ -51,9 +51,11 @@ build_llama=0
 if [[ "$need_llama" == 1 && ! -x "$LLAMA_DIR/build/bin/llama-server" ]]; then build_llama=1; fi
 build_edge0=0
 if [[ "$need_edge0" == 1 && ! ( -f "$EDGE0_DIR/.router-access-log-v1" \
+    && -f "$EDGE0_DIR/.router-vision-v1" \
     && -x "$EDGE0_DIR/edge0-infer/build/cpu/bin/edge0-infer" \
     && -x "$EDGE0_DIR/edge0-strata/build/strata" \
-    && -x "$EDGE0_DIR/edge0-strata/.venv/bin/python" ) ]]; then build_edge0=1; fi
+    && -x "$EDGE0_DIR/edge0-strata/.venv/bin/python" \
+    && -x "$EDGE0_DIR/edge0-strata/build-vision/bin/strata-vision" ) ]]; then build_edge0=1; fi
 
 need_cmake=0
 need_ninja=0
@@ -101,4 +103,5 @@ if [[ "$need_llama" == 1 ]]; then
 fi
 if [[ "$need_edge0" == 1 ]]; then
   printf 'Edge0: %s/edge0-infer/build/cpu/bin/edge0-infer\n' "$EDGE0_DIR"
+  printf 'Edge0 images: %s/edge0-strata/build-vision/bin/strata-vision\n' "$EDGE0_DIR"
 fi
